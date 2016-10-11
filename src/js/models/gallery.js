@@ -54,15 +54,6 @@ camera.models.Gallery = function() {
 };
 
 /**
- * Picture types.
- * @enum {number}
- */
-camera.models.Gallery.PictureType = Object.freeze({
-  STILL: 0,  // Still pictures (images).
-  MOTION: 1  // Motion pictures (video).
-});
-
-/**
  * Instance of the singleton gallery model.
  * @type {camera.models.Gallery}
  * @private
@@ -77,15 +68,14 @@ camera.models.Gallery.instance_ = null;
 camera.models.Gallery.queue_ = new camera.util.Queue();
 
 /**
- * Wraps a picture file as well as the thumbnail file of a picture in the
+ * Wraps an image file as well as the thumbnail file of a picture in the
  * gallery.
  *
  * @param {FileEntry} thumbnailEntry Thumbnail file entry.
- * @param {FileEntry} pictureEntry Picture file entry.
- * @param {camera.models.Gallery.PictureType} type Picture type.
+ * @param {FileEntry} imageEntry Image file entry.
  * @constructor
  */
-camera.models.Gallery.Picture = function(thumbnailEntry, pictureEntry, type) {
+camera.models.Gallery.Picture = function(thumbnailEntry, imageEntry) {
   /**
    * @type {FileEntry}
    * @private
@@ -96,13 +86,7 @@ camera.models.Gallery.Picture = function(thumbnailEntry, pictureEntry, type) {
    * @type {FileEntry}
    * @private
    */
-  this.pictureEntry_ = pictureEntry;
-
-  /**
-   * @type {camera.models.Gallery.PictureType}
-   * @private
-   */
-  this.pictureType_ = type;
+  this.imageEntry_ = imageEntry;
 
   // End of properties. Freeze the object.
   Object.freeze(this);
@@ -112,17 +96,14 @@ camera.models.Gallery.Picture.prototype = {
   get thumbnailURL() {
     return this.thumbnailEntry_.toURL();
   },
-  get pictureURL() {
-    return this.pictureEntry_.toURL();
+  get imageURL() {
+    return this.imageEntry_.toURL();
   },
   get thumbnailEntry() {
     return this.thumbnailEntry_;
   },
-  get pictureEntry() {
-    return this.pictureEntry_;
-  },
-  get pictureType() {
-    return this.pictureType_;
+  get imageEntry() {
+    return this.imageEntry_;
   }
 };
 
@@ -196,7 +177,7 @@ camera.models.Gallery.prototype = {
  */
 camera.models.Gallery.prototype.initialize_ = function(onSuccess, onFailure) {
   webkitRequestFileSystem(window.PERSISTENT,
-      768 * 1024 * 1024 /* 768MB */,
+      512 * 1024 * 1024 /* 512MB */,
       function(inFileSystem) {
         this.fileSystem_ = inFileSystem;
         this.loadStoredPictures_(onSuccess, onFailure);
@@ -252,26 +233,18 @@ camera.models.Gallery.prototype.loadStoredPictures_ = function(
       }
       if (entry.name.indexOf('thumb-') === 0)
         continue;
-      var type = (entry.name.indexOf('VID_') === 0) ?
-          camera.models.Gallery.PictureType.MOTION :
-          camera.models.Gallery.PictureType.STILL;
       queue.run(function(entry, callback) {
-        var thumbnailName = 'thumb-' + entry.name;
-        if (type == camera.models.Gallery.PictureType.MOTION) {
-          thumbnailName = (thumbnailName.substr(0, thumbnailName.lastIndexOf('.')) ||
-              thumbnailName) + '.jpg';
-        }
-        var thumbnailEntry = entriesByName[thumbnailName];
+        var thumbnailEntry = entriesByName['thumb-' + entry.name];
         // No thumbnail, most probably pictures taken by the old Camera App.
         // So, create the thumbnail now.
         if (!thumbnailEntry) {
-          this.createThumbnail_(entry.toURL(), type, function(thumbnailBlob) {
+          this.createThumbnail_(entry.toURL(), function(thumbnailDataURL) {
             this.savePictureToFile_(
-                thumbnailName,
-                thumbnailBlob,
+                'thumb-' + entry.name,
+                thumbnailDataURL,
                 function(recreatedThumbnailEntry) {
                   this.pictures_.push(new camera.models.Gallery.Picture(
-                      recreatedThumbnailEntry, entry, type));
+                      recreatedThumbnailEntry, entry));
                   callback();
                 }.bind(this), function() {
                   // Ignore this error, since it is better to load something
@@ -288,7 +261,7 @@ camera.models.Gallery.prototype.loadStoredPictures_ = function(
         } else {
           // The thumbnail is available.
           this.pictures_.push(new camera.models.Gallery.Picture(
-              thumbnailEntry, entry, type));
+              thumbnailEntry, entry));
           callback();
         }
       }.bind(this, entry));
@@ -320,7 +293,7 @@ camera.models.Gallery.prototype.loadStoredPictures_ = function(
  */
 camera.models.Gallery.prototype.deletePicture = function(
     picture, onSuccess, onFailure) {
-  picture.pictureEntry.remove(function() {
+  picture.imageEntry.remove(function() {
     picture.thumbnailEntry.remove(function() {
       // Notify observers.
       for (var i = 0; i < this.observers_.length; i++) {
@@ -335,7 +308,7 @@ camera.models.Gallery.prototype.deletePicture = function(
 };
 
 /**
- * Saves the picture to the external storage.
+ * Saves the picture with the specified index to the external storage.
  *
  * @param {camera.models.Gallery.Picture} picture Picture to be exported.
  * @param {FileEntry} fileEntry Target file entry.
@@ -344,25 +317,43 @@ camera.models.Gallery.prototype.deletePicture = function(
  */
 camera.models.Gallery.prototype.exportPicture = function(
     picture, fileEntry, onSuccess, onFailure) {
-  // TODO(yuli): Handle insufficient storage.
-  fileEntry.getParent(function(directory) {
-    picture.pictureEntry.copyTo(
-        directory, fileEntry.name, onSuccess, onFailure);
-  }, onFailure);
+  var onDataLoaded = function(data) {
+    fileEntry.createWriter(function(fileWriter) {
+      fileWriter.onwriteend = onSuccess;
+      fileWriter.onerror = onFailure;
+      // Blob has to be a Blob instance to be saved.
+      var array = new Uint8Array(data.length);
+      for (var index = 0; index < data.length; index++) {
+        array[index] = data.charCodeAt(index);
+      }
+      var blob = new Blob([array], {type: 'image/jpeg'});
+      fileWriter.write(blob);
+    }.bind(this),
+    onFailure);
+  }.bind(this);
+
+  picture.imageEntry.file(function(file) {
+    var reader = new FileReader;
+    reader.onloadend = function(e) {
+      onDataLoaded(reader.result);
+    };
+    reader.onerror = onFailure;
+    reader.readAsBinaryString(file);
+  }.bind(this), onFailure);
 };
 
 /**
  * Saves the picture to the passed file name in the internal storage.
  *
  * @param {string} fileName Name of the file in the internal storage.
- * @param {Blob} blob Data of the picture to be saved.
+ * @param {string} dataURL Data of the image to be saved.
  * @param {function(FileEntry)} onSuccess Success callback with the entry of
  *     the saved picture.
  * @param {function(FileError)} onFailure Failure callback.
  * @private
  */
 camera.models.Gallery.prototype.savePictureToFile_ = function(
-    fileName, blob, onSuccess, onFailure) {
+    fileName, dataURL, onSuccess, onFailure) {
   this.fileSystem_.root.getFile(
       fileName,
       {create: true},
@@ -372,6 +363,13 @@ camera.models.Gallery.prototype.savePictureToFile_ = function(
             onSuccess(fileEntry);
           }.bind(this);
           fileWriter.onerror = onFailure;
+          var base64string = dataURL.substring(dataURL.indexOf(',') + 1);
+          var data = atob(base64string);
+          var array = new Uint8Array(data.length);
+          for (var index = 0; index < data.length; index++) {
+            array[index] = data.charCodeAt(index);
+          }
+          var blob = new Blob([array], {type: 'image/jpeg'});
           fileWriter.write(blob);
         }.bind(this),
         onFailure);
@@ -383,60 +381,41 @@ camera.models.Gallery.prototype.savePictureToFile_ = function(
  * Creates a thumbnail from the original picture.
  *
  * @param {string} url Original picture as an URL.
- * @param {camera.models.Gallery.PictureType} type Original picture's type.
- * @param {function(Blob)} onSuccess Success callback with the thumbnail as a
- *     blob.
+ * @param {function(string)} onSuccess Success callback with the thumbnail as a
+ *     data URL.
  * @param {function()} onFailure Failure callback.
  * @private
  */
 camera.models.Gallery.prototype.createThumbnail_ = function(
-    url, type, onSuccess, onFailure) {
-  var name = (type == camera.models.Gallery.PictureType.MOTION) ?
-      'video' : 'img';
-  var original = document.createElement(name);
+    url, onSuccess, onFailure) {
+  var fullImg = document.createElement('img');
 
-  var drawThumbnail = function() {
+  fullImg.onload = function() {
     var canvas = document.createElement('canvas');
     var context = canvas.getContext('2d');
     var thumbnailWidth = 480;  // Twice wider than in CSS for hi-dpi,
                                // like Pixel.
-    var ratio = (name == 'video') ?
-        original.videoHeight / original.videoWidth :
-        original.height / original.width;
-    var thumbnailHeight = Math.round(480 * ratio);
+    var thumbnailHeight = Math.round((480 / fullImg.width) * fullImg.height);
     canvas.width = thumbnailWidth;
     canvas.height = thumbnailHeight;
-    context.drawImage(original, 0, 0, thumbnailWidth, thumbnailHeight);
-    canvas.toBlob(function(blob) {
-      if (blob) {
-        onSuccess(blob);
-      } else {
-        onFailure();
-      }
-    }, 'image/jpeg');
+    context.drawImage(fullImg, 0, 0, thumbnailWidth, thumbnailHeight);
+    onSuccess(canvas.toDataURL());
   };
 
-  if (name == 'video') {
-    original.onloadeddata = drawThumbnail;
-  } else {
-    original.onload = drawThumbnail;
-  }
-
-  original.onerror = function() {
+  fullImg.onerror = function() {
     onFailure();
   };
 
-  original.src = url;
+  fullImg.src = url;
 };
 
 /**
  * Generates a file name base for the picture.
  *
- * @param {camera.models.Gallery.PictureType} type Type of the picture.
  * @return {string} File name base.
  * @private
  */
-camera.models.Gallery.prototype.generateFileNameBase_ = function(type) {
+camera.models.Gallery.prototype.generateFileNameBase_ = function() {
   function pad(n) {
     if (n < 10)
       n = '0' + n;
@@ -444,10 +423,8 @@ camera.models.Gallery.prototype.generateFileNameBase_ = function(type) {
   }
 
   // File name base will be formatted as IMG_yyyyMMdd_HHmmss.
-  var prefix = (type == camera.models.Gallery.PictureType.MOTION) ?
-      'VID_' : 'IMG_';
   var now = new Date();
-  var result = prefix + now.getFullYear() + pad(now.getMonth() + 1) +
+  var result = 'IMG_' + now.getFullYear() + pad(now.getMonth() + 1) +
       pad(now.getDate()) + '_' + pad(now.getHours()) + pad(now.getMinutes()) +
       pad(now.getSeconds());
 
@@ -466,42 +443,28 @@ camera.models.Gallery.prototype.generateFileNameBase_ = function(type) {
 };
 
 /**
- * Generates a file name extension for the picture.
- *
- * @param {camera.models.Gallery.PictureType} type Type of the picture.
- * @return {string} File name extension.
- * @private
- */
-camera.models.Gallery.prototype.generateFileNameExt_ = function(type) {
-  return (type == camera.models.Gallery.PictureType.MOTION) ?
-      '.webm' : '.jpg';
-};
-
-/**
  * Adds a picture to the gallery and saves it in the internal storage.
  *
- * @param {Blob} blob Data of the picture to be added.
- * @param {camera.models.Gallery.PictureType} type Type of the picture to be
- *     added.
+ * @param {string} dataURL Data of the picture to be added.
+ * @param {function()} onSuccess Success callback.
  * @param {function()} onFailure Failure callback.
  */
 camera.models.Gallery.prototype.addPicture = function(
-    blob, type, onFailure) {
-  this.createThumbnail_(
-      URL.createObjectURL(blob), type, function(thumbnailBlob) {
+    dataURL, onSuccess, onFailure) {
+  this.createThumbnail_(dataURL, function(thumbnailDataURL) {
     // Save the thumbnail as well as the full screen resolution picture.
-    var fileNameBase = this.generateFileNameBase_(type);
+    var fileNameBase = this.generateFileNameBase_();
 
     this.savePictureToFile_(
         'thumb-' + fileNameBase + '.jpg',
-        thumbnailBlob,
+        thumbnailDataURL,
         function(thumbnailEntry) {
           this.savePictureToFile_(
-            fileNameBase + this.generateFileNameExt_(type),
-            blob,
-            function(pictureEntry) {
+            fileNameBase + '.jpg',
+            dataURL,
+            function(imageEntry) {
               var picture = new camera.models.Gallery.Picture(
-                  thumbnailEntry, pictureEntry, type);
+                  thumbnailEntry, imageEntry);
               this.pictures_.push(picture);
               // Notify observers.
               for (var i = 0; i < this.observers_.length; i++) {

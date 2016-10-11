@@ -19,7 +19,6 @@
   },
   "permissions": [
     "videoCapture",
-    "audioCapture",
     "storage",
     "unlimitedStorage",
     "idle",

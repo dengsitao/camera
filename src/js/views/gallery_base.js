@@ -78,8 +78,27 @@ camera.views.GalleryBase.DOMPicture = function(picture, element) {
    */
   this.element_ = element;
 
+  /**
+   * @type {camera.views.GalleryBase.DOMPicture.DisplayResolution}
+   * @private
+   */
+  this.displayResolution_ =
+      camera.views.GalleryBase.DOMPicture.DisplayResolution.LOW;
+
   // End of properties. Seal the object.
   Object.seal(this);
+
+  // Load the image.
+  this.updateImage_();
+};
+
+/**
+ * Sets resolution of the picture to be displayed.
+ * @enum {number}
+ */
+camera.views.GalleryBase.DOMPicture.DisplayResolution = {
+  LOW: 0,
+  HIGH: 1
 };
 
 camera.views.GalleryBase.DOMPicture.prototype = {
@@ -88,6 +107,30 @@ camera.views.GalleryBase.DOMPicture.prototype = {
   },
   get element() {
     return this.element_;
+  },
+  set displayResolution(value) {
+    if (this.displayResolution_ == value)
+      return;
+    this.displayResolution_ = value;
+    this.updateImage_();
+  },
+  get displayResolution() {
+    return this.displayResolution_;
+  }
+};
+
+/**
+ * Loads the picture into the DOM element.
+ * @private
+ */
+camera.views.GalleryBase.DOMPicture.prototype.updateImage_ = function() {
+  switch (this.displayResolution_) {
+    case camera.views.GalleryBase.DOMPicture.DisplayResolution.LOW:
+      this.element_.src = this.picture_.thumbnailURL;
+      break;
+    case camera.views.GalleryBase.DOMPicture.DisplayResolution.HIGH:
+      this.element_.src = this.picture_.imageURL;
+      break;
   }
 };
 
@@ -130,14 +173,11 @@ camera.views.GalleryBase.prototype.exportSelection = function() {
   if (!selectedIndexes.length)
     return;
 
-  var onError = function(filename) {
-    // TODO(yuli): Show a non-intrusive toast message instead.
+  var onError = function() {
+    // TODO(mtomasz): Check if it works.
     this.context_.onError(
         'gallery-export-error',
-        chrome.i18n.getMessage('errorMsgGalleryExportFailed', filename));
-    setTimeout(function() {
-      this.context_.onErrorRecovered('gallery-export-error');
-    }.bind(this), 2000);
+        chrome.i18n.getMessage('errorMsgGalleryExportFailed'));
   }.bind(this);
 
   var exportPicture = function(fileEntry, picture) {
@@ -145,28 +185,47 @@ camera.views.GalleryBase.prototype.exportSelection = function() {
         picture,
         fileEntry,
         function() {},
-        function() { onError(fileEntry.name); });
+        onError);
   }.bind(this);
 
-  chrome.fileSystem.chooseEntry({
-    type: 'openDirectory'
-  }, function(dirEntry) {
-    if (!dirEntry)
-      return;
+  if (selectedIndexes.length == 1) {
+    var accepts = [{
+      description: '*.jpg',
+      extensions: ['jpg', 'jpeg'],
+      mimeTypes: ['image/jpeg']
+    }];
 
-    var savePictureAsFile = function(picture) {
-      dirEntry.getFile(picture.pictureEntry.name, {
-        create: true, exclusive: false
-      }, function(fileEntry) {
-          exportPicture(fileEntry, picture);
-      });
-    };
+    var picture = this.lastSelectedPicture().picture;
+    chrome.fileSystem.chooseEntry({
+      type: 'saveFile',
+      suggestedName: picture.imageEntry.name,
+      accepts: accepts
+    }, function(fileEntry) {
+        if (!fileEntry)
+          return;
+        exportPicture(fileEntry, picture);
+    });
+  } else {
+    chrome.fileSystem.chooseEntry({
+      type: 'openDirectory'
+    }, function(dirEntry) {
+        if (!dirEntry)
+          return;
 
-    var selectedPictures = this.selectedPictures();
-    for (var i = 0; i < selectedPictures.length; i++) {
-      savePictureAsFile(selectedPictures[i].picture);
-    }
-  }.bind(this));
+        var savePictureAsFile = function(picture) {
+          dirEntry.getFile(picture.imageEntry.name, {
+            create: true, exclusive: false
+          }, function(fileEntry) {
+              exportPicture(fileEntry, picture);
+          });
+        };
+
+        var selectedPictures = this.selectedPictures();
+        for (var i = 0; i < selectedPictures.length; i++) {
+          savePictureAsFile(selectedPictures[i].picture);
+        }
+    }.bind(this));
+  }
 };
 
 /**
