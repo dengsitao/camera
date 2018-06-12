@@ -532,31 +532,39 @@ camera.models.Gallery.prototype.generateFileNameExt_ = function(type) {
  */
 camera.models.Gallery.prototype.addPicture = function(
     blob, type, onFailure) {
-  this.createThumbnail_(
-      URL.createObjectURL(blob), type, function(thumbnailBlob) {
-    // Save the thumbnail as well as the full screen resolution picture.
-    var fileNameBase = this.generateFileNameBase_(type);
+  var savePicture = function(blob) {
+    this.createThumbnail_(
+        URL.createObjectURL(blob), type, function(thumbnailBlob) {
+      // Save the thumbnail as well as the full screen resolution picture.
+      var fileNameBase = this.generateFileNameBase_(type);
 
-    this.savePictureToFile_(
-        'thumb-' + fileNameBase + '.jpg',
-        thumbnailBlob,
-        function(thumbnailEntry) {
-          this.savePictureToFile_(
-            fileNameBase + this.generateFileNameExt_(type),
-            blob,
-            function(pictureEntry) {
-              var picture = new camera.models.Gallery.Picture(
-                  thumbnailEntry, pictureEntry, type);
-              this.pictures_.push(picture);
-              // Notify observers.
-              for (var i = 0; i < this.observers_.length; i++) {
-                this.observers_[i].onPictureAdded(picture);
-              }
-            }.bind(this),
-            // TODO(mtomasz): Remove the thumbnail on error.
-            onFailure);
-        }.bind(this),
-        onFailure);
-  }.bind(this), onFailure);
+      this.savePictureToFile_(
+          'thumb-' + fileNameBase + '.jpg',
+          thumbnailBlob,
+          function(thumbnailEntry) {
+            this.savePictureToFile_(
+              fileNameBase + this.generateFileNameExt_(type),
+              blob,
+              function(pictureEntry) {
+                var picture = new camera.models.Gallery.Picture(
+                    thumbnailEntry, pictureEntry, type);
+                this.pictures_.push(picture);
+                // Notify observers.
+                for (var i = 0; i < this.observers_.length; i++) {
+                  this.observers_[i].onPictureAdded(picture);
+                }
+              }.bind(this),
+              // TODO(mtomasz): Remove the thumbnail on error.
+              onFailure);
+          }.bind(this),
+          onFailure);
+    }.bind(this), onFailure);
+  }.bind(this);
+
+  if (type == camera.models.Gallery.PictureType.MOTION) {
+    savePicture(blob);
+  } else {
+    camera.util.orientPhoto(blob, savePicture, onFailure);
+  }
 };
 
