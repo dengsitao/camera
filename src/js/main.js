@@ -238,6 +238,15 @@ camera.Camera.prototype.start = function() {
     catch(function(error) {
       console.error('Failed to initialize the Camera app.', error);
     });
+
+  // For nocturne device, directly mark migration as done so that the camera
+  // icon can open GCA.
+  camera.util.isBoard('nocturne').then(isNocturne => {
+    if (isNocturne && chrome.chromeosInfoPrivate) {
+      console.log('nocturne migration set to true');
+      chrome.chromeosInfoPrivate.set('cameraMediaConsolidated', true);
+    }
+  });
 };
 
 /**
