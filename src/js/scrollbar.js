@@ -11,8 +11,7 @@ var cca = cca || {};
 
 /**
  * Creates a scroll bar for a scrollable area.
- *
- * @param {cca.util.SmoothScroller} scoller Scroller for the scrollable
+ * @param {cca.util.SmoothScroller} scroller Scroller for the scrollable
  *     element.
  * @constructor
  */
@@ -72,17 +71,16 @@ cca.ScrollBar = function(scroller) {
   this.track.appendChild(this.thumb);
 
   // Add event handlers.
-  this.thumb.addEventListener('mousedown',
-                              this.onThumbPressed_.bind(this));
+  this.thumb.addEventListener('mousedown', this.onThumbPressed_.bind(this));
   window.addEventListener('mouseup', this.onMouseUp_.bind(this));
   window.addEventListener('mousemove', this.onMouseMove_.bind(this));
 
-  this.scroller.element.addEventListener('scroll', this.onScroll_.bind(this));
+  this.scroller.element.addEventListener('scroll', this.redraw.bind(this));
   this.domObserver_ = new MutationObserver(this.onDomChanged_.bind(this));
   this.domObserver_.observe(
       this.scroller.element, {subtree: true, attributes: true});
 
-  this.redraw_();
+  this.redraw();
 };
 
 /**
@@ -91,15 +89,7 @@ cca.ScrollBar = function(scroller) {
  */
 cca.ScrollBar.prototype.setThumbHidden = function(hidden) {
   this.thumbHidden_ = hidden;
-  this.redraw_();
-};
-
-/**
- * Scroll handler.
- * @private
- */
-cca.ScrollBar.prototype.onScroll_ = function() {
-  this.redraw_();
+  this.redraw();
 };
 
 /**
@@ -128,6 +118,7 @@ cca.ScrollBar.prototype.onMouseUp_ = function(event) {
 };
 
 /**
+ * @abstract
  * @return {number} Total client size in pixels.
  * @protected
  */
@@ -136,6 +127,7 @@ cca.ScrollBar.prototype.getClientTotal = function() {
 };
 
 /**
+ * @abstract
  * @return {number} Total scroll size in pixels.
  * @protected
  */
@@ -144,6 +136,7 @@ cca.ScrollBar.prototype.getScrollTotal = function() {
 };
 
 /**
+ * @abstract
  * @param {Event} event Event.
  * @return {number} Total client position for the event in pixels.
  * @protected
@@ -153,6 +146,7 @@ cca.ScrollBar.prototype.getClientPosition = function(event) {
 };
 
 /**
+ * @abstract
  * @param {Event} event Event.
  * @return {number} Total screen position for the event in pixels.
  * @protected
@@ -162,6 +156,7 @@ cca.ScrollBar.prototype.getScreenPosition = function(event) {
 };
 
 /**
+ * @abstract
  * @return {number} Scroll position in pixels.
  * @protected
  */
@@ -171,6 +166,7 @@ cca.ScrollBar.prototype.getScrollPosition = function() {
 
 /**
  * Sets the scroll position.
+ * @abstract
  * @param {number} value Position in pixels.
  * @protected
  */
@@ -180,7 +176,7 @@ cca.ScrollBar.prototype.setScrollPosition = function(value) {
 
 /**
  * Sets geometry of the scroll bar's thumb.
- *
+ * @abstract
  * @param {number} position Position of the thumb in pixels.
  * @param {number} size Size of the thumb in pixels.
  * @protected
@@ -195,8 +191,9 @@ cca.ScrollBar.prototype.setThumbGeometry = function(position, size) {
  * @private
  */
 cca.ScrollBar.prototype.onMouseMove_ = function(event) {
-  if (!this.thumbLastScreenPosition_)
+  if (!this.thumbLastScreenPosition_) {
     return;
+  }
 
   if (!event.which) {
     this.onMouseUp_(event);
@@ -211,7 +208,7 @@ cca.ScrollBar.prototype.onMouseMove_ = function(event) {
        this.thumbLastScreenPosition_) * (scrollTotal / clientTotal);
 
   this.setScrollPosition(scrollPosition);
-  this.redraw_();
+  this.redraw();
 
   this.thumbLastScreenPosition_ = this.getScreenPosition(event);
 };
@@ -227,23 +224,15 @@ cca.ScrollBar.prototype.onDomChanged_ = function() {
     this.domChangedTimer_ = null;
   }
   this.domChangedTimer_ = setTimeout(function() {
-    this.redraw_();
+    this.redraw();
     this.domChangedTimer_ = null;
   }.bind(this), 50);
 };
 
 /**
- * Resize handler to update the thumb size/position by redrawing the scroll bar.
- */
-cca.ScrollBar.prototype.onResize = function() {
-  this.redraw_();
-};
-
-/**
  * Redraws the scroll bar.
- * @private
  */
-cca.ScrollBar.prototype.redraw_ = function() {
+cca.ScrollBar.prototype.redraw = function() {
   var clientTotal = this.getClientTotal();
   var scrollTotal = this.getScrollTotal();
 
@@ -258,8 +247,7 @@ cca.ScrollBar.prototype.redraw_ = function() {
 
 /**
  * Creates a horizontal scroll bar.
- *
- * @param {cca.util.SmoothScroller} scoller Scroller for the scrollable
+ * @param {cca.util.SmoothScroller} scroller Scroller for the scrollable
  *     element.
  * @constructor
  * @extends {cca.ScrollBar}
@@ -312,9 +300,9 @@ cca.HorizontalScrollBar.prototype.getScrollPosition = function() {
  * @override
  */
 cca.HorizontalScrollBar.prototype.setScrollPosition = function(value) {
-  this.scroller.scrollTo(value,
-                         this.scroller.element.scrollTop,
-                         cca.util.SmoothScroller.Mode.INSTANT);
+  this.scroller.scrollTo(
+      value, this.scroller.element.scrollTop,
+      cca.util.SmoothScroller.Mode.INSTANT);
 };
 
 /**

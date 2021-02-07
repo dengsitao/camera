@@ -18,7 +18,7 @@ cca.util = cca.util || {};
  * Gets the clockwise rotation and flip that can orient a photo to its upright
  * position.
  * @param {Blob} blob JPEG blob that might contain EXIF orientation field.
- * @return {Promise<Object{rotation: number, flip: boolean}>}
+ * @return {Promise<Object<number, boolean>>}
  */
 cca.util.getPhotoOrientation = function(blob) {
   let getOrientation = new Promise((resolve, reject) => {
@@ -63,7 +63,7 @@ cca.util.getPhotoOrientation = function(blob) {
     reader.readAsArrayBuffer(blob);
   });
 
-  return getOrientation.then(orientation => {
+  return getOrientation.then((orientation) => {
     switch (orientation) {
       case 1:
         return {rotation: 0, flip: false};
@@ -142,7 +142,7 @@ cca.util.orientPhoto = function(blob, onSuccess, onFailure) {
     }, 'image/jpeg');
   };
 
-  cca.util.getPhotoOrientation(blob).then(orientation => {
+  cca.util.getPhotoOrientation(blob).then((orientation) => {
     if (orientation.rotation == 0 && !orientation.flip) {
       onSuccess(blob);
     } else {
@@ -158,16 +158,16 @@ cca.util.orientPhoto = function(blob, onSuccess, onFailure) {
 
 /**
  * Checks if the current device is in the given device list.
- * @param {Array.<string>} ids Device ids.
+ * @param {Array<string>} ids Device ids.
  * @return {!Promise<boolean>} Promise for the result.
  */
 cca.util.isChromeOSDevice = function(ids) {
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     if (!chrome.chromeosInfoPrivate) {
       resolve(false);
       return;
     }
-    chrome.chromeosInfoPrivate.get(['customizationId'], values => {
+    chrome.chromeosInfoPrivate.get(['customizationId'], (values) => {
       var device = values['customizationId'];
       resolve(device && ids.indexOf(device) >= 0);
     });
@@ -194,17 +194,6 @@ cca.util.isChromeOS = function() {
 };
 
 /**
- * Sets up localized aria attributes for TTS on the entire document. Uses the
- * dedicated i18n-label attribute as a strings identifier.
- */
-cca.util.setupElementsAria = function() {
-  document.querySelectorAll('*[i18n-label]').forEach((element) => {
-    element.setAttribute('aria-label', chrome.i18n.getMessage(
-        element.getAttribute('i18n-label')));
-  });
-};
-
-/**
  * Animates the element once by applying 'animate' class.
  * @param {HTMLElement} element Element to be animated.
  * @param {function()=} callback Callback called on completion.
@@ -213,7 +202,7 @@ cca.util.animateOnce = function(element, callback) {
   element.classList.remove('animate');
   element.offsetWidth; // Force calculation to re-apply animation.
   element.classList.add('animate');
-  cca.util.waitAnimationCompleted(element, 0, () => {
+  cca.util.waitAnimationCompleted(element, () => {
     element.classList.remove('animate');
     if (callback) {
       callback();
@@ -232,10 +221,9 @@ cca.util.animateCancel = function(element) {
 /**
  * Waits for animation completed and calls the callback.
  * @param {HTMLElement} element Element to be animated.
- * @param {number} timeout Timeout for completion. 0 for no timeout.
  * @param {function()} callback Callback called on completion.
  */
-cca.util.waitAnimationCompleted = function(element, timeout, callback) {
+cca.util.waitAnimationCompleted = function(element, callback) {
   var completed = false;
   var onCompleted = (event) => {
     if (completed || (event && event.target != element)) {
@@ -246,9 +234,6 @@ cca.util.waitAnimationCompleted = function(element, timeout, callback) {
     element.removeEventListener('animationend', onCompleted);
     callback();
   };
-  if (timeout) {
-    setTimeout(onCompleted, timeout);
-  }
   // Assume only either 'transition' or 'animation' is applied on the element.
   // Listen to both end-events for its completion.
   element.addEventListener('transitionend', onCompleted);
@@ -259,16 +244,15 @@ cca.util.waitAnimationCompleted = function(element, timeout, callback) {
  * Scrolls the parent of the element so the element is centered.
  * @param {HTMLElement} element Element to be visible.
  * @param {cca.util.SmoothScroller} scroller Scroller to be used.
- * @param {cca.util.SmoothScroller.Mode=} opt_mode Scrolling mode. Default:
- *     SMOOTH.
+ * @param {cca.util.SmoothScroller.Mode} mode Scrolling mode.
  */
-cca.util.scrollToCenter = function(element, scroller, opt_mode) {
+cca.util.scrollToCenter = function(element, scroller, mode) {
   var scrollLeft = Math.round(element.offsetLeft + element.offsetWidth / 2 -
     scroller.clientWidth / 2);
   var scrollTop = Math.round(element.offsetTop + element.offsetHeight / 2 -
     scroller.clientHeight / 2);
 
-  scroller.scrollTo(scrollLeft, scrollTop, opt_mode);
+  scroller.scrollTo(scrollLeft, scrollTop, mode);
 };
 
 /**
@@ -379,12 +363,9 @@ cca.util.SmoothScroller.prototype.flushScroll_ = function() {
  * Scrolls smoothly to specified position.
  * @param {number} x X Target scrollLeft value.
  * @param {number} y Y Target scrollTop value.
- * @param {cca.util.SmoothScroller.Mode=} opt_mode Scrolling mode. Default:
- *     SMOOTH.
+ * @param {cca.util.SmoothScroller.Mode} mode Scrolling mode.
  */
-cca.util.SmoothScroller.prototype.scrollTo = function(x, y, opt_mode) {
-  var mode = opt_mode || cca.util.SmoothScroller.Mode.SMOOTH;
-
+cca.util.SmoothScroller.prototype.scrollTo = function(x, y, mode) {
   // Limit to the allowed values.
   var x = Math.max(0, Math.min(x, this.scrollWidth - this.clientWidth));
   var y = Math.max(0, Math.min(y, this.scrollHeight - this.clientHeight));
@@ -392,9 +373,9 @@ cca.util.SmoothScroller.prototype.scrollTo = function(x, y, opt_mode) {
   switch (mode) {
     case cca.util.SmoothScroller.Mode.INSTANT:
       // Cancel any current animations.
-      if (this.animating_)
+      if (this.animating_) {
         this.flushScroll_();
-
+      }
       this.element_.scrollLeft = x;
       this.element_.scrollTop = y;
       break;
@@ -424,14 +405,12 @@ cca.util.SmoothScroller.prototype.scrollTo = function(x, y, opt_mode) {
 
       // Remove translation, and switch to scrollLeft/scrollTop when the
       // animation is finished.
-      cca.util.waitAnimationCompleted(
-          this.padder_,
-          0,
-          function() {
-            // Check if the animation got invalidated by a later scroll.
-            if (currentAnimationId == this.animationId_)
-              this.flushScroll_();
-         }.bind(this));
+      cca.util.waitAnimationCompleted(this.padder_, () => {
+        // Check if the animation got invalidated by a later scroll.
+        if (currentAnimationId == this.animationId_) {
+          this.flushScroll_();
+        }
+      });
       break;
   }
 };
@@ -457,7 +436,7 @@ cca.util.PointerTracker = function(element, callback) {
   this.callback_ = callback;
 
   /**
-   * @type {Array.<number>}
+   * @type {Array<number>}
    * @private
    */
   this.lastMousePosition_ = null;
@@ -567,13 +546,13 @@ cca.util.ScrollTracker = function(scroller, onScrollStarted, onScrollEnded) {
   this.scrolling_ = false;
 
   /**
-   * @type {Array.<number>}
+   * @type {Array<number>}
    * @private
    */
   this.startScrollPosition_ = [0, 0];
 
   /**
-   * @type {Array.<number>}
+   * @type {Array<number>}
    * @private
    */
   this.lastScrollPosition_ = [0, 0];
@@ -613,7 +592,7 @@ cca.util.ScrollTracker.prototype = {
   },
 
   /**
-   * @return {Array.<number>} Returns distance of the last detected scroll.
+   * @return {Array<number>} Returns distance of the last detected scroll.
    */
   get delta() {
     return [
@@ -663,19 +642,19 @@ cca.util.ScrollTracker.prototype.onTouchEnd_ = function(event) {
  * Starts monitoring.
  */
 cca.util.ScrollTracker.prototype.start = function() {
-  if (this.timer_ !== null)
-    return;
-  this.timer_ = setInterval(this.probe_.bind(this), 100);
+  if (this.timer_ === null) {
+    this.timer_ = setInterval(this.probe_.bind(this), 100);
+  }
 };
 
 /**
  * Stops monitoring.
  */
 cca.util.ScrollTracker.prototype.stop = function() {
-  if (this.timer_ === null)
-    return;
-  clearTimeout(this.timer_);
-  this.timer_ = null;
+  if (this.timer_ !== null) {
+    clearTimeout(this.timer_);
+    this.timer_ = null;
+  }
 };
 
 /**
@@ -743,13 +722,13 @@ cca.util.MouseScroller = function(scroller) {
   this.scroller_ = scroller;
 
   /**
-   * @type {Array.<number>}
+   * @type {Array<number>}
    * @private
    */
   this.startPosition_ = null;
 
   /**
-   * @type {Array.<number>}
+   * @type {Array<number>}
    * @private
    */
   this.startScrollPosition_ = null;
@@ -770,9 +749,9 @@ cca.util.MouseScroller = function(scroller) {
  * @private
  */
 cca.util.MouseScroller.prototype.onMouseDown_ = function(event) {
-  if (event.which != 1)
+  if (event.which != 1) {
     return;
-
+  }
   this.startPosition_ = [event.screenX, event.screenY];
   this.startScrollPosition_ = [
     this.scroller_.scrollLeft,
@@ -786,8 +765,9 @@ cca.util.MouseScroller.prototype.onMouseDown_ = function(event) {
  * @private
  */
 cca.util.MouseScroller.prototype.onMouseMove_ = function(event) {
-  if (!this.startPosition_)
+  if (!this.startPosition_) {
     return;
+  }
 
   // It may happen that we won't receive the mouseup event, when clicking on
   // the -webkit-app-region: drag area.
@@ -841,13 +821,11 @@ cca.util.getShortcutIdentifier = function(event) {
         identifier += 'Up';
         break;
       case 'a':
-        identifier += 'A';
-        break;
       case 'p':
-        identifier += 'P';
-        break;
       case 's':
-        identifier += 'S';
+      case 'v':
+      case 'r':
+        identifier += event.key.toUpperCase();
         break;
       default:
         identifier += event.key;
@@ -857,15 +835,11 @@ cca.util.getShortcutIdentifier = function(event) {
 };
 
 /**
- * Makes all elements with a tabindex attribute unfocusable by mouse.
+ * Makes the element unfocusable by mouse.
+ * @param {HTMLElement} element Element to be unfocusable.
  */
-cca.util.makeElementsUnfocusableByMouse = function() {
-  var elements = document.querySelectorAll('[tabindex]');
-  for (var index = 0; index < elements.length; index++) {
-    elements[index].addEventListener('mousedown', function(event) {
-      event.preventDefault();
-    });
-  }
+cca.util.makeUnfocusableByMouse = function(element) {
+  element.addEventListener('mousedown', (event) => event.preventDefault());
 };
 
 /**

@@ -39,12 +39,12 @@ cca.bg.TOPBAR_COLOR = '#000000';
  * Creates the window. Note, that only one window at once is supported.
  */
 cca.bg.create = function() {
-  new Promise(resolve => {
-    chrome.storage.local.get({maximized: false, fullscreen: false},
-        values => {
-      resolve(values.maximized || values.fullscreen);
-    });
-  }).then(maximized => {
+  new Promise((resolve) => {
+    chrome.storage.local.get(
+        {maximized: false, fullscreen: false}, (values) => {
+          resolve(values.maximized || values.fullscreen);
+        });
+  }).then((maximized) => {
     // The height will be later calculated to match video aspect ratio once the
     // stream is available.
     var initialHeight = Math.round(
@@ -61,14 +61,14 @@ cca.bg.create = function() {
         left: Math.round((window.screen.availWidth - cca.bg.MIN_WIDTH) / 2),
         top: Math.round((window.screen.availHeight - initialHeight) / 2),
       },
-    }, inAppWindow => {
+    }, (inAppWindow) => {
       // Temporary workaround for crbug.com/452737.
       // 'state' option in CreateWindowOptions is ignored when a window is
       // launched with 'hidden' option, so we restore window state here.
       // Don't launch in fullscreen as the topbar might not work as expected.
-      if (maximized)
+      if (maximized) {
         inAppWindow.maximize();
-
+      }
       inAppWindow.onClosed.addListener(() => {
         chrome.storage.local.set({maximized: inAppWindow.isMaximized()});
         chrome.storage.local.set({fullscreen: inAppWindow.isFullscreen()});

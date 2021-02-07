@@ -16,13 +16,12 @@ cca.views = cca.views || {};
 
 /**
  * Creates the camera-view controller.
- * @param {cca.Router} router View router to switch views.
  * @param {cca.models.Gallery} model Model object.
  * @param {function(number)} onAspectRatio Callback to report aspect ratio.
  * @constructor
  */
-cca.views.Camera = function(router, model, onAspectRatio) {
-  cca.View.call(this, router, document.querySelector('#camera'), 'camera');
+cca.views.Camera = function(model, onAspectRatio) {
+  cca.views.View.call(this, '#camera');
 
   /**
    * Gallery model used to save taken pictures.
@@ -72,7 +71,7 @@ cca.views.Camera = function(router, model, onAspectRatio) {
    * @type {cca.views.camera.Options}
    * @private
    */
-  this.options_ = new cca.views.camera.Options(router, this.stop_.bind(this));
+  this.options_ = new cca.views.camera.Options(this.stop_.bind(this));
 
   /**
    * Record-time for the elapsed recording time.
@@ -86,7 +85,7 @@ cca.views.Camera = function(router, model, onAspectRatio) {
    * @type {cca.views.camera.GalleryButton}
    * @private
    */
-  this.galleryButton_ = new cca.views.camera.GalleryButton(router, model);
+  this.galleryButton_ = new cca.views.camera.GalleryButton(model);
 
   /**
    * Button for taking photos and recording videos.
@@ -94,12 +93,6 @@ cca.views.Camera = function(router, model, onAspectRatio) {
    * @private
    */
   this.shutterButton_ = document.querySelector('#shutter');
-
-  /**
-   * @type {string}
-   * @private
-   */
-  this.keyBuffer_ = '';
 
   /**
    * @type {boolean}
@@ -115,14 +108,14 @@ cca.views.Camera = function(router, model, onAspectRatio) {
 
   /**
    * Promise for the operation that starts camera.
-   * @type {Promise<>}
+   * @type {Promise}
    * @private
    */
   this.started_ = null;
 
   /**
    * Promise for the current timer ticks.
-   * @type {Promise<>}
+   * @type {Promise}
    * @private
    */
   this.ticks_ = null;
@@ -156,7 +149,7 @@ cca.views.Camera = function(router, model, onAspectRatio) {
 cca.views.Camera.RECORD_MIMETYPE = 'video/x-matroska;codecs=avc1';
 
 cca.views.Camera.prototype = {
-  __proto__: cca.View.prototype,
+  __proto__: cca.views.View.prototype,
   get capturing() {
     return document.body.classList.contains('capturing');
   },
@@ -176,15 +169,14 @@ cca.views.Camera.prototype = {
  */
 cca.views.Camera.prototype.prepare = function() {
   // Monitor the states to stop camera when locked/minimized.
-  chrome.idle.onStateChanged.addListener(newState => {
+  chrome.idle.onStateChanged.addListener((newState) => {
     this.locked_ = (newState == 'locked');
     if (this.locked_) {
       this.stop_();
     }
   });
-  chrome.app.window.current().onMinimized.addListener(() => {
-    this.stop_();
-  });
+  chrome.app.window.current().onMinimized.addListener(() => this.stop_());
+
   // Start the camera after preparing the options (device ids).
   this.options_.prepare();
   this.start_();
@@ -193,17 +185,8 @@ cca.views.Camera.prototype.prepare = function() {
 /**
  * @override
  */
-cca.views.Camera.prototype.onEnter = function() {
-  this.onResize();
-};
-
-/**
- * @override
- */
-cca.views.Camera.prototype.onActivate = function() {
-  if (document.activeElement != document.body) {
-    this.shutterButton_.focus();
-  }
+cca.views.Camera.prototype.focus = function() {
+  this.shutterButton_.focus();
 };
 
 /**
@@ -212,6 +195,9 @@ cca.views.Camera.prototype.onActivate = function() {
  * @private
  */
 cca.views.Camera.prototype.onShutterButtonClicked_ = function(event) {
+  if (!this.capturing) {
+    return;
+  }
   if (this.taking) {
     // End the prior ongoing take if any; a new take shouldn't be started
     // until the prior one is ended.
@@ -233,20 +219,7 @@ cca.views.Camera.prototype.onShutterButtonClicked_ = function(event) {
 };
 
 /**
- * Updates UI controls for capturing/taking state changes.
- * @private
- */
-cca.views.Camera.prototype.updateControls_ = function() {
-  // Update the shutter's label before enabling or disabling it.
-  var [capturing, taking] = [this.capturing, this.taking];
-  this.updateShutterLabel_();
-  this.shutterButton_.disabled = !capturing;
-  this.options_.updateControls(capturing, taking);
-  this.galleryButton_.disabled = !capturing || taking;
-};
-
-/**
- * Updates the shutter button's label.
+ * Updates the shutter button's label for taking/record-mode state changes.
  * @private
  */
 cca.views.Camera.prototype.updateShutterLabel_ = function() {
@@ -257,32 +230,25 @@ cca.views.Camera.prototype.updateShutterLabel_ = function() {
     label = (this.taking && this.ticks_) ?
         'takePhotoCancelButton' : 'takePhotoButton';
   }
-  this.shutterButton_.setAttribute('i18n-label', label);
   this.shutterButton_.setAttribute('aria-label', chrome.i18n.getMessage(label));
 };
 
 /**
  * @override
  */
-cca.views.Camera.prototype.onResize = function() {
+cca.views.Camera.prototype.layout = function() {
   this.layout_.update();
 };
 
 /**
  * @override
  */
-cca.views.Camera.prototype.onKeyPressed = function(event) {
-  this.keyBuffer_ += String.fromCharCode(event.which);
-  this.keyBuffer_ = this.keyBuffer_.substr(-10);
-
-  if (this.keyBuffer_.indexOf('VER') !== -1) {
-    cca.toast.show(chrome.runtime.getManifest().version);
-    this.keyBuffer_ = '';
-  }
-  if (this.keyBuffer_.indexOf('RES') !== -1) {
+cca.views.Camera.prototype.handlingKey = function(key) {
+  if (key == 'Ctrl-R') {
     cca.toast.show(this.preview_.toString());
-    this.keyBuffer_ = '';
+    return true;
   }
+  return false;
 };
 
 /**
@@ -292,7 +258,7 @@ cca.views.Camera.prototype.onKeyPressed = function(event) {
 cca.views.Camera.prototype.beginTake_ = function() {
   document.body.classList.add('taking');
   this.ticks_ = this.options_.timerTicks();
-  this.updateControls_();
+  this.updateShutterLabel_();
 
   Promise.resolve(this.ticks_).then(() => {
     // Play a sound before starting to record and delay the take to avoid the
@@ -302,12 +268,14 @@ cca.views.Camera.prototype.beginTake_ = function() {
     this.takeTimeout_ = setTimeout(() => {
       if (this.recordMode) {
         // Take of recording will be ended by another shutter click.
-        this.take_ = this.createRecordingBlob_().catch(error => {
-          throw [error, 'errorMsgEmptyRecording'];
+        this.take_ = this.createRecordingBlob_().catch((error) => {
+          cca.toast.show('errorMsgEmptyRecording');
+          throw error;
         });
       } else {
-        this.take_ = this.createPhotoBlob_().catch(error => {
-          throw [error, 'errorMsgTakePhotoFailed'];
+        this.take_ = this.createPhotoBlob_().catch((error) => {
+          cca.toast.show('errorMsgTakePhotoFailed');
+          throw error;
         });
         this.endTake_();
       }
@@ -317,7 +285,7 @@ cca.views.Camera.prototype.beginTake_ = function() {
 
 /**
  * Ends the current take (or clears scheduled further takes if any.)
- * @return {!Promise<>} Promise for the operation.
+ * @return {!Promise} Promise for the operation.
  * @private
  */
 cca.views.Camera.prototype.endTake_ = function() {
@@ -333,7 +301,7 @@ cca.views.Camera.prototype.endTake_ = function() {
     this.mediaRecorder_.stop();
   }
 
-  return Promise.resolve(this.take_).then(blob => {
+  return Promise.resolve(this.take_).then((blob) => {
     if (blob && !blob.handled) {
       // Play a sound and save the result after a successful take.
       blob.handled = true;
@@ -341,18 +309,16 @@ cca.views.Camera.prototype.endTake_ = function() {
       this.options_.playSound(recordMode ?
           cca.views.camera.Options.Sound.RECORDEND :
           cca.views.camera.Options.Sound.SHUTTER);
-      return this.model_.savePicture(blob, recordMode).catch(error => {
-        throw [error, 'errorMsgSaveFileFailed'];
+      return this.model_.savePicture(blob, recordMode).catch((error) => {
+        cca.toast.show('errorMsgSaveFileFailed');
+        throw error;
       });
     }
-  }).catch(([error, message]) => {
-    console.error(error);
-    cca.toast.show(message);
-  }).finally(() => {
+  }).catch(console.error).finally(() => {
     // Re-enable UI controls after finishing the take.
     this.take_ = null;
     document.body.classList.remove('taking');
-    this.updateControls_();
+    this.updateShutterLabel_();
   });
 };
 
@@ -381,17 +347,23 @@ cca.views.Camera.prototype.createRecordingBlob_ = function() {
       if (recordedBlob.size) {
         resolve(recordedBlob);
       } else {
-        reject('Recording blob error.');
+        reject(new Error('Recording blob error.'));
       }
     };
     this.mediaRecorder_.addEventListener('dataavailable', ondataavailable);
     this.mediaRecorder_.addEventListener('stop', onstop);
 
-    // Start recording and update the UI for the ongoing recording. Force to
-    // re-enable audio track before starting recording (crbug.com/878255).
-    this.options_.updateMicAudio(true);
+    // Start recording and update the UI for the ongoing recording.
+    // TODO(yuli): Don't re-enable audio after crbug.com/878255 fixed in M73.
+    var track = this.preview_.stream.getAudioTracks()[0];
+    var enableAudio = (enabled) => {
+      if (track) {
+        track.enabled = enabled;
+      }
+    };
+    enableAudio(true);
     this.mediaRecorder_.start();
-    this.options_.updateMicAudio();
+    enableAudio(document.body.classList.contains('mic'));
     this.recordTime_.start();
   });
 };
@@ -411,7 +383,7 @@ cca.views.Camera.prototype.createPhotoBlob_ = function() {
       }
       return this.photoCapabilities_;
     };
-    return getPhotoCapabilities().then(photoCapabilities => {
+    return getPhotoCapabilities().then((photoCapabilities) => {
       // Set to take the highest resolution, but the photo to be taken will
       // still have the same aspect ratio with the preview.
       var photoSettings = {
@@ -432,7 +404,7 @@ cca.views.Camera.prototype.createPhotoBlob_ = function() {
 cca.views.Camera.prototype.prepareMediaRecorder_ = function() {
   if (this.mediaRecorder_ == null) {
     if (!MediaRecorder.isTypeSupported(cca.views.Camera.RECORD_MIMETYPE)) {
-      throw 'The preferred mimeType is not supported.';
+      throw new Error('The preferred mimeType is not supported.');
     }
     this.mediaRecorder_ = new MediaRecorder(
         this.preview_.stream, {mimeType: cca.views.Camera.RECORD_MIMETYPE});
@@ -457,27 +429,26 @@ cca.views.Camera.prototype.prepareImageCapture_ = function() {
  */
 cca.views.Camera.prototype.constraintsCandidates_ = function() {
   var deviceConstraints = (deviceId, recordMode) => {
-    var videoConstraints =
-        [{
-          aspectRatio: { ideal: recordMode ? 1.7777777778 : 1.3333333333 },
-          width: { min: 1280 },
-          frameRate: { min: 24 },
-        },
-        {
-          width: { min: 640 },
-          frameRate: { min: 24 },
-        }];
-
     // Constraints are ordered by priority.
-    return videoConstraints.map((constraint) => {
+    return [
+      {
+        aspectRatio: {ideal: recordMode ? 1.7777777778 : 1.3333333333},
+        width: {min: 1280},
+        frameRate: {min: 24},
+      },
+      {
+        width: {min: 640},
+        frameRate: {min: 24},
+      },
+    ].map((constraint) => {
       // Each passed-in video-constraint will be modified here.
       if (deviceId) {
-        constraint.deviceId = { exact: deviceId };
+        constraint.deviceId = {exact: deviceId};
       } else {
         // As a default camera use the one which is facing the user.
-        constraint.facingMode = { exact: 'user' };
+        constraint.facingMode = {exact: 'user'};
       }
-      return { audio: recordMode, video: constraint };
+      return {audio: recordMode, video: constraint};
     });
   };
 
@@ -493,10 +464,12 @@ cca.views.Camera.prototype.constraintsCandidates_ = function() {
 
 /**
  * Stops camera and tries to start camera stream again if possible.
- * @return {!Promise<>} Promise for the start-camera operation.
+ * @return {!Promise} Promise for the start-camera operation.
  * @private
  */
 cca.views.Camera.prototype.stop_ = function() {
+  // Update shutter label as record-mode might be toggled before reaching here.
+  this.updateShutterLabel_();
   // Wait for ongoing 'start' and 'take' done before restarting camera.
   return Promise.all([
     this.started_,
@@ -507,7 +480,6 @@ cca.views.Camera.prototype.stop_ = function() {
     this.imageCapture_ = null;
     this.photoCapabilities_ = null;
     document.body.classList.remove('capturing');
-    this.updateControls_();
     this.start_();
     return this.started_;
   });
@@ -519,19 +491,18 @@ cca.views.Camera.prototype.stop_ = function() {
  */
 cca.views.Camera.prototype.start_ = function() {
   var suspend = this.locked_ || chrome.app.window.current().isMinimized();
-  this.started_ = (suspend ? Promise.reject('suspend') :
+  this.started_ = (suspend ? Promise.reject(new Error('suspend')) :
       this.constraintsCandidates_()).then((candidates) => {
     var tryStartWithCandidate = (index) => {
       if (index >= candidates.length) {
-        return Promise.reject('out-of-candidates');
+        return Promise.reject(new Error('out-of-candidates'));
       }
       var constraints = candidates[index];
       return navigator.mediaDevices.getUserMedia(constraints).then(
           this.preview_.start.bind(this.preview_)).then(() => {
         this.options_.updateValues(constraints, this.preview_.stream);
         document.body.classList.add('capturing');
-        this.updateControls_();
-        cca.App.onErrorRecovered('no-camera');
+        cca.nav.close('warning', 'no-camera');
       }).catch((error) => {
         console.error(error);
         return new Promise((resolve) => {
@@ -542,9 +513,9 @@ cca.views.Camera.prototype.start_ = function() {
     };
     return tryStartWithCandidate(0);
   }).catch((error) => {
-    if (error != 'suspend') {
+    if (error && error.message != 'suspend') {
       console.error(error);
-      cca.App.onError('no-camera', 'errorMsgNoCamera');
+      cca.nav.open('warning', 'no-camera');
     }
     // Schedule to retry.
     if (this.retryStartTimeout_) {

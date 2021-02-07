@@ -21,18 +21,11 @@ cca.views.camera = cca.views.camera || {};
 
 /**
  * Creates a controller for the gallery-button of Camera view.
- * @param {cca.Router} router View router to switch views.
  * @param {cca.models.Gallery} model Model object.
  * @implements {cca.models.Gallery.Observer}
  * @constructor
  */
-cca.views.camera.GalleryButton = function(router, model) {
-  /**
-   * @type {cca.Router}
-   * @private
-   */
-  this.router_ = router;
-
+cca.views.camera.GalleryButton = function(model) {
   /**
    * @type {cca.models.Gallery}
    * @private
@@ -54,10 +47,10 @@ cca.views.camera.GalleryButton = function(router, model) {
   // End of properties, seal the object.
   Object.seal(this);
 
-  this.button_.addEventListener('click', event => {
+  this.button_.addEventListener('click', (event) => {
     // Check if the last picture still exists before opening it in the gallery.
     // TODO(yuli): Remove this workaround for unable watching changed-files.
-    this.model_.checkLastPicture().then(picture => {
+    this.model_.checkLastPicture().then((picture) => {
       if (picture) {
         this.openGallery_(picture);
       }
@@ -65,24 +58,18 @@ cca.views.camera.GalleryButton = function(router, model) {
   });
 };
 
-cca.views.camera.GalleryButton.prototype = {
-  set disabled(value) {
-    this.button_.disabled = value;
-  },
-};
-
 /**
  * Updates the button for the model changes.
  * @private
  */
 cca.views.camera.GalleryButton.prototype.updateButton_ = function() {
-  this.model_.lastPicture().then(picture => {
+  this.model_.lastPicture().then((picture) => {
     if (picture != this.lastPicture_) {
       this.lastPicture_ = picture;
       return true;
     }
     return false;
-  }).then(changed => {
+  }).then((changed) => {
     if (!changed) {
       return;
     }
@@ -98,17 +85,16 @@ cca.views.camera.GalleryButton.prototype.updateButton_ = function() {
  * @private
  */
 cca.views.camera.GalleryButton.prototype.openGallery_ = function(picture) {
-  if (cca.models.FileSystem.externalFs && chrome.fileManagerPrivate) {
+  if (cca.App.useGalleryApp()) {
     const id = 'nlkncpkkdoccmpiclbokaimcnedabhhm|app|open';
-    chrome.fileManagerPrivate.executeTask(
-        id, [picture.pictureEntry], result => {
+    const entry = picture.pictureEntry;
+    chrome.fileManagerPrivate.executeTask(id, [entry], (result) => {
       if (result != 'opened' && result != 'message_sent') {
         console.warn('Unable to open picture: ' + result);
       }
     });
   } else {
-    this.router_.navigate(cca.Router.ViewIdentifier.BROWSER,
-        {picture: picture});
+    cca.nav.open('browser', picture);
   }
 };
 

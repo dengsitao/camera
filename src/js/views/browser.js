@@ -17,14 +17,12 @@ cca.views = cca.views || {};
 /**
  * Creates the Browser view controller.
  * TODO(yuli): Merge GalleryBase into Browser.
- * @param {cca.Router} router View router to switch views.
  * @param {cca.models.Gallery} model Model object.
  * @extends {camera.view.GalleryBase}
  * @constructor
  */
-cca.views.Browser = function(router, model) {
-  cca.views.GalleryBase.call(
-      this, router, model, document.querySelector('#browser'), 'browser');
+cca.views.Browser = function(model) {
+  cca.views.GalleryBase.call(this, '#browser', model);
 
   /**
    * @type {cca.util.SmoothScroller}
@@ -76,7 +74,7 @@ cca.views.Browser = function(router, model) {
   document.querySelector('#browser-delete').addEventListener(
       'click', this.onDeleteButtonClicked_.bind(this));
   document.querySelector('#browser-back').addEventListener(
-      'click', this.router.back.bind(this.router));
+      'click', this.leave.bind(this));
 };
 
 cca.views.Browser.prototype = {
@@ -84,61 +82,46 @@ cca.views.Browser.prototype = {
 };
 
 /**
- * Prepares the view.
- */
-cca.views.Browser.prototype.prepare = function() {
-  // Hide export-button if using external file system.
-  if (cca.models.FileSystem.externalFs) {
-    document.querySelector('#browser-export').hidden = true;
-  }
-};
-
-/**
- * Enters the view. Assumes, that the arguments may be provided.
- * @param {Object=} opt_arguments Arguments for the browser.
+ * @param {cca.models.Gallery.Picture} picture Picture to be selected.
  * @override
  */
-cca.views.Browser.prototype.onEnter = function(opt_arguments) {
-  var index = null;
-  if (opt_arguments && opt_arguments.picture) {
-    index = this.pictureIndex(opt_arguments.picture);
-  }
-  // Navigate to the newest picture if the given picture isn't found.
+cca.views.Browser.prototype.entering = function(picture) {
+  var index = this.pictureIndex(picture);
   if (index == null && this.pictures.length) {
+    // Select the latest picture if the given picture isn't found.
     index = this.pictures.length - 1;
   }
   this.setSelectedIndex(index);
-
-  this.onResize();
   this.scrollTracker_.start();
 };
 
 /**
  * @override
  */
-cca.views.Browser.prototype.onActivate = function() {
-  cca.views.GalleryBase.prototype.onActivate.apply(this, arguments);
-  if (!this.scroller_.animating)
-    this.synchronizeFocus();
-};
-
-/**
- * @override
- */
-cca.views.Browser.prototype.onLeave = function() {
+cca.views.Browser.prototype.leaving = function() {
   this.scrollTracker_.stop();
   this.setSelectedIndex(null);
+  return true;
 };
 
 /**
  * @override
  */
-cca.views.Browser.prototype.onResize = function() {
+cca.views.Browser.prototype.focus = function() {
+  if (!this.scroller_.animating) {
+    this.synchronizeFocus();
+  }
+};
+
+/**
+ * @override
+ */
+cca.views.Browser.prototype.layout = function() {
   this.pictures.forEach(function(picture) {
     cca.views.Browser.updateElementSize_(picture.element);
   });
 
-  this.scrollBar_.onResize();
+  this.scrollBar_.redraw();
   var selectedPicture = this.lastSelectedPicture();
   if (selectedPicture) {
     cca.util.scrollToCenter(selectedPicture.element, this.scroller_,
@@ -208,8 +191,9 @@ cca.views.Browser.prototype.onScrollEnded_ = function() {
 
   // Select the closest picture to the center of the window.
   // This may invoke scrolling, to center the currently selected picture.
-  if (minIndex != -1)
+  if (minIndex != -1) {
     this.setSelectedIndex(minIndex);
+  }
 };
 
 /**
@@ -252,14 +236,14 @@ cca.views.Browser.prototype.updatePicturesResolutions_ = function() {
 
   var replaceElement = function(wrapper, element) {
     wrapper.replaceChild(element, wrapper.firstElementChild);
+    cca.nav.setTabIndex(this, element, -1);
     cca.views.Browser.updateElementSize_(wrapper);
-  };
+  }.bind(this);
 
   var updateImage = function(wrapper, url) {
     var img = wrappedElement(wrapper, 'IMG');
     if (!img) {
       img = document.createElement('img');
-      img.tabIndex = -1;
       img.onload = function() {
         replaceElement(wrapper, img);
       };
@@ -274,7 +258,6 @@ cca.views.Browser.prototype.updatePicturesResolutions_ = function() {
 
   var updateVideo = function(wrapper, url) {
     var video = document.createElement('video');
-    video.tabIndex = -1;
     video.controls = true;
     video.setAttribute('controlsList', 'nodownload nofullscreen');
     video.onloadeddata = function() {
@@ -298,7 +281,7 @@ cca.views.Browser.prototype.updatePicturesResolutions_ = function() {
       var picture = domPicture.picture;
       var thumbnailURL = picture.thumbnailURL;
       if (domPicture == selectedPicture || !thumbnailURL) {
-        picture.pictureURL().then(url => {
+        picture.pictureURL().then((url) => {
           if (picture.isMotionPicture) {
             updateVideo(wrapper, url);
           } else {
@@ -317,11 +300,15 @@ cca.views.Browser.prototype.updatePicturesResolutions_ = function() {
  * @override
  */
 cca.views.Browser.prototype.setSelectedIndex = function(index) {
+  var scrollMode = (this.lastSelectedIndex() === null) ?
+      cca.util.SmoothScroller.Mode.INSTANT :
+      cca.util.SmoothScroller.Mode.SMOOTH;
   cca.views.GalleryBase.prototype.setSelectedIndex.apply(this, arguments);
 
   var selectedPicture = this.lastSelectedPicture();
   if (selectedPicture) {
-    cca.util.scrollToCenter(selectedPicture.element, this.scroller_);
+    cca.util.scrollToCenter(
+        selectedPicture.element, this.scroller_, scrollMode);
   }
   this.updateButtons_();
 
@@ -340,8 +327,8 @@ cca.views.Browser.prototype.setSelectedIndex = function(index) {
 /**
  * @override
  */
-cca.views.Browser.prototype.onKeyPressed = function(event) {
-  switch (cca.util.getShortcutIdentifier(event)) {
+cca.views.Browser.prototype.handlingKey = function(key) {
+  switch (key) {
     case 'Right':
       if (this.pictures.length) {
         var leadIndex = this.lastSelectedIndex();
@@ -351,8 +338,7 @@ cca.views.Browser.prototype.onKeyPressed = function(event) {
           this.setSelectedIndex(Math.max(0, leadIndex - 1));
         }
       }
-      event.preventDefault();
-      return;
+      return true;
     case 'Left':
       if (this.pictures.length) {
         var leadIndex = this.lastSelectedIndex();
@@ -363,22 +349,20 @@ cca.views.Browser.prototype.onKeyPressed = function(event) {
               Math.min(this.pictures.length - 1, leadIndex + 1));
         }
       }
-      event.preventDefault();
-      return;
+      return true;
     case 'End':
-      if (this.pictures.length)
+      if (this.pictures.length) {
         this.setSelectedIndex(0);
-      event.preventDefault();
-      return;
+      }
+      return true;
     case 'Home':
-      if (this.pictures.length)
+      if (this.pictures.length) {
         this.setSelectedIndex(this.pictures.length - 1);
-      event.preventDefault();
-      return;
+      }
+      return true;
   }
-
-  // Call the base view for unhandled keys.
-  cca.views.GalleryBase.prototype.onKeyPressed.apply(this, arguments);
+  // Call the gallery-base view for unhandled keys.
+  return cca.views.GalleryBase.prototype.handlingKey.apply(this, arguments);
 };
 
 /**
@@ -393,20 +377,22 @@ cca.views.Browser.prototype.onPictureDeleted = function(picture) {
  * @override
  */
 cca.views.Browser.prototype.addPictureToDOM = function(picture) {
-  var wrapper = document.createElement('div');
-  wrapper.className = 'media-wrapper';
-  wrapper.id = 'browser-picture-' + (this.lastPictureIndex_++);
-  wrapper.tabIndex = -1;
-  wrapper.setAttribute('role', 'option');
-  wrapper.setAttribute('aria-selected', 'false');
-
   // Display high-res picture if no cached thumbnail.
   // TODO(yuli): Fix wrappers' size to avoid scrolling for changed elements.
   var thumbnailURL = picture.thumbnailURL;
-  Promise.resolve(thumbnailURL || picture.pictureURL()).then(url => {
+  Promise.resolve(thumbnailURL || picture.pictureURL()).then((url) => {
+    var wrapper = document.createElement('div');
+    cca.nav.setTabIndex(this, wrapper, -1);
+    cca.util.makeUnfocusableByMouse(wrapper);
+    wrapper.className = 'media-wrapper';
+    wrapper.id = 'browser-picture-' + (this.lastPictureIndex_++);
+    wrapper.setAttribute('role', 'option');
+    wrapper.setAttribute('aria-selected', 'false');
+
     var isVideo = !thumbnailURL && picture.isMotionPicture;
     var element = wrapper.appendChild(document.createElement(
         isVideo ? 'video' : 'img'));
+    cca.nav.setTabIndex(this, element, -1);
     var updateElementSize = () => {
       cca.views.Browser.updateElementSize_(wrapper);
     };
@@ -417,7 +403,6 @@ cca.views.Browser.prototype.addPictureToDOM = function(picture) {
     } else {
       element.onload = updateElementSize;
     }
-    element.tabIndex = -1;
     element.src = url;
 
     // Insert the picture's DOM element in a sorted timestamp order.
@@ -435,10 +420,7 @@ cca.views.Browser.prototype.addPictureToDOM = function(picture) {
     var domPicture = new cca.views.GalleryBase.DOMPicture(picture, wrapper);
     this.pictures.splice(index + 1, 0, domPicture);
 
-    wrapper.addEventListener('mousedown', event => {
-      event.preventDefault(); // Prevent focusing.
-    });
-    wrapper.addEventListener('click', event => {
+    wrapper.addEventListener('click', (event) => {
       // If scrolled while clicking, then discard this selection, since another
       // one will be choosen in the onScrollEnded handler.
       if (this.scrollTracker_.scrolling &&
@@ -446,11 +428,6 @@ cca.views.Browser.prototype.addPictureToDOM = function(picture) {
         return;
       }
       this.setSelectedIndex(this.pictures.indexOf(domPicture));
-    });
-    wrapper.addEventListener('focus', () => {
-      var index = this.pictures.indexOf(domPicture);
-      if (this.lastSelectedIndex() != index)
-        this.setSelectedIndex(index);
     });
   });
 };
@@ -466,11 +443,4 @@ cca.views.Browser.updateElementSize_ = function(wrapper) {
   var maxWidth = browserPadder.clientWidth * 0.7;
   var maxHeight = browserPadder.clientHeight * 0.7;
   cca.util.updateElementSize(wrapper, maxWidth, maxHeight, false);
-};
-
-/**
- * @override
- */
-cca.views.Browser.prototype.ariaListNode = function() {
-  return document.querySelector('#browser');
 };

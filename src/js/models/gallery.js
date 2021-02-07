@@ -15,18 +15,18 @@ var cca = cca || {};
 cca.models = cca.models || {};
 
 /**
- * Creates the Gallery view controller.
+ * Creates the gallery model controller.
  * @constructor
  */
 cca.models.Gallery = function() {
   /**
-   * @type {Array.<cca.models.Gallery.Observer>}
+   * @type {Array<cca.models.Gallery.Observer>}
    * @private
    */
   this.observers_ = [];
 
   /**
-   * @type {Promise<Array.<cca.models.Gallery.Picture>>}
+   * @type {Promise<Array<cca.models.Gallery.Picture>>}
    * @private
    */
   this.loaded_ = null;
@@ -141,58 +141,53 @@ cca.models.Gallery.Observer.prototype.onPictureAdded = function(picture) {
 };
 
 /**
- * Loads the model.
- * @param {Array.<cca.models.Gallery.Observer>} observers Observers for
- *     the pictures' model changes.
+ * Adds an observer.
+ * @param {cca.models.Gallery.Observer} observer Observer to be added.
  */
-cca.models.Gallery.prototype.load = function(observers) {
-  this.observers_ = observers;
-  this.loaded_ = cca.models.FileSystem.getEntries().then(
-      ([pictureEntries, thumbnailEntriesByName]) => {
-    return this.loadStoredPictures_(pictureEntries, thumbnailEntriesByName);
-  });
+cca.models.Gallery.prototype.addObserver = function(observer) {
+  this.observers_.push(observer);
+};
 
-  this.loaded_.then(pictures => {
-    pictures.forEach(picture => {
-      this.notifyObservers_('onPictureAdded', picture);
-    });
-  }).catch(error => {
-    console.warn(error);
-  });
+/**
+ * Notifies observers about the added or deleted picture.
+ * @param {string} fn Observers' callback function name.
+ * @param {cca.models.Gallery.Picture} picture Picture added or deleted.
+ * @private
+ */
+cca.models.Gallery.prototype.notifyObservers_ = function(fn, picture) {
+  this.observers_.forEach((observer) => observer[fn](picture));
 };
 
 /**
  * Loads the pictures from the storages and adds them to the pictures model.
- * @param {Array.<FileEntry>} pictureEntries Picture entries.
- * @param {Object{string, FileEntry}} thumbnailEntriesByName Thumbanil entries
- *     mapped by thumbnail names.
- * @return {!Promise<Array.<cca.models.Gallery.Picture>>} Promise for the
- *     pictures.
- * @private
  */
-cca.models.Gallery.prototype.loadStoredPictures_ = function(
-    pictureEntries, thumbnailEntriesByName) {
-  var wrapped = pictureEntries.filter(entry => entry.name).map(entry => {
-    // Create the thumbnail if it's not cached. Ignore errors since it is
-    // better to load something than nothing.
-    // TODO(yuli): Remove unused thumbnails.
-    var thumbnailName = cca.models.FileSystem.getThumbnailName(entry);
-    var thumbnailEntry = thumbnailEntriesByName[thumbnailName];
-    return this.wrapPicture_(entry, thumbnailEntry);
-  });
+cca.models.Gallery.prototype.load = function() {
+  this.loaded_ = cca.models.FileSystem.getEntries().then(
+      ([pictureEntries, thumbnailEntriesByName]) => {
+        var wrapped =
+            pictureEntries.filter((entry) => entry.name).map((entry) => {
+              var name = cca.models.FileSystem.getThumbnailName(entry);
+              return this.wrapPicture_(entry, thumbnailEntriesByName[name]);
+            });
+        // Sort pictures by timestamps to make most recent picture at the end.
+        // TODO(yuli): Remove unused thumbnails.
+        return Promise.all(wrapped).then((pictures) => {
+          return pictures.sort((a, b) => {
+            if (a.timestamp == null) {
+              return -1;
+            }
+            if (b.timestamp == null) {
+              return 1;
+            }
+            return a.timestamp - b.timestamp;
+          });
+        });
+      });
 
-  return Promise.all(wrapped).then(pictures => {
-    // Sort pictures by timestamps. The most recent picture will be at the end.
-    return pictures.sort((a, b) => {
-      if (a.timestamp == null) {
-        return -1;
-      }
-      if (b.timestamp == null) {
-        return 1;
-      }
-      return a.timestamp - b.timestamp;
-    });
-  });
+  this.loaded_.then((pictures) => {
+    pictures.forEach((picture) =>
+        this.notifyObservers_('onPictureAdded', picture));
+  }).catch(console.warn);
 };
 
 /**
@@ -200,9 +195,7 @@ cca.models.Gallery.prototype.loadStoredPictures_ = function(
  * @return {!Promise<cca.models.Gallery.Picture>} Promise for the result.
  */
 cca.models.Gallery.prototype.lastPicture = function() {
-  return this.loaded_.then(pictures => {
-    return pictures[pictures.length - 1];
-  });
+  return this.loaded_.then((pictures) => pictures[pictures.length - 1]);
 };
 
 /**
@@ -210,17 +203,15 @@ cca.models.Gallery.prototype.lastPicture = function() {
  * @return {!Promise<cca.models.Gallery.Picture>} Promise for the result.
  */
 cca.models.Gallery.prototype.checkLastPicture = function() {
-  return this.lastPicture().then(picture => {
+  return this.lastPicture().then((picture) => {
     // Assume only external pictures were removed without updating the model.
-    if (cca.models.FileSystem.externalFs && picture) {
+    var dir = cca.models.FileSystem.externalDir;
+    if (dir && picture) {
       var name = picture.pictureEntry.name;
-      return cca.models.FileSystem.getFile_(
-          cca.models.FileSystem.externalFs, name, false).then(entry => {
-        return [picture, (entry != null)];
-      });
-    } else {
-      return [picture, (picture != null)];
+      return cca.models.FileSystem.getFile(dir, name, false).then(
+          (entry) => [picture, (entry != null)]);
     }
+    return [picture, (picture != null)];
   }).then(([picture, pictureEntryExist]) => {
     if (pictureEntryExist || !picture) {
       return picture;
@@ -234,7 +225,7 @@ cca.models.Gallery.prototype.checkLastPicture = function() {
  * Deletes the picture in the pictures' model.
  * @param {cca.models.Gallery.Picture} picture Picture to be deleted.
  * @param {boolean=} pictureEntryDeleted Whether the picture-entry was deleted.
- * @return {!Promise<>} Promise for the operation.
+ * @return {!Promise} Promise for the operation.
  */
 cca.models.Gallery.prototype.deletePicture = function(
     picture, pictureEntryDeleted) {
@@ -261,11 +252,11 @@ cca.models.Gallery.prototype.deletePicture = function(
  * Exports the picture to the external storage.
  * @param {cca.models.Gallery.Picture} picture Picture to be exported.
  * @param {FileEntry} entry Target file entry.
- * @return {!Promise<>} Promise for the operation.
+ * @return {!Promise} Promise for the operation.
  */
 cca.models.Gallery.prototype.exportPicture = function(picture, entry) {
   return new Promise((resolve, reject) => {
-    entry.getParent(directory => {
+    entry.getParent((directory) => {
       picture.pictureEntry.copyTo(directory, entry.name, resolve, reject);
     }, reject);
   });
@@ -280,54 +271,42 @@ cca.models.Gallery.prototype.exportPicture = function(picture, entry) {
  */
 cca.models.Gallery.prototype.wrapPicture_ = function(
     pictureEntry, thumbnailEntry) {
+  // Create the thumbnail if it's not cached yet. Ignore errors and proceed to
+  // wrap the picture even if unable to save its thumbnail.
   var isMotionPicture = cca.models.FileSystem.hasVideoPrefix(pictureEntry);
   var saved = () => {
-    // Proceed to wrap the picture even if unable to save its thumbnail.
     return cca.models.FileSystem.saveThumbnail(
         isMotionPicture, pictureEntry).catch(() => null);
   };
-  return Promise.resolve(thumbnailEntry || saved()).then(thumbnailEntry => {
+  return Promise.resolve(thumbnailEntry || saved()).then((thumbnailEntry) => {
     return new cca.models.Gallery.Picture(
         thumbnailEntry, pictureEntry, isMotionPicture);
   });
 };
 
 /**
- * Notifies observers about the added or deleted picture.
- * @param {string} fn Observers' callback function name.
- * @param {cca.models.Gallery.Picture} picture Picture added or deleted.
- * @private
- */
-cca.models.Gallery.prototype.notifyObservers_ = function(fn, picture) {
-  for (var i = 0; i < this.observers_.length; i++) {
-    this.observers_[i][fn](picture);
-  }
-};
-
-/**
  * Saves a picture that will also be added to the pictures' model.
  * @param {Blob} blob Data of the picture to be added.
  * @param {boolean} isMotionPicture Picture to be added is a video.
- * @return {!Promise<>} Promise for the operation.
+ * @return {!Promise} Promise for the operation.
  */
 cca.models.Gallery.prototype.savePicture = function(blob, isMotionPicture) {
   // TODO(yuli): models.Gallery listens to models.FileSystem's file-added event
   // and then add a new picture into the model.
-  var saved = new Promise(resolve => {
+  var saved = new Promise((resolve) => {
     if (isMotionPicture) {
       resolve(blob);
     } else {
       // Ignore errors since it is better to save something than nothing.
       // TODO(yuli): Support showing images by EXIF orientation instead.
-      cca.util.orientPhoto(blob, resolve, () => {
-        resolve(blob);
-      });
+      cca.util.orientPhoto(blob, resolve, () => resolve(blob));
     }
-  }).then(blob => {
+  }).then((blob) => {
     return cca.models.FileSystem.savePicture(isMotionPicture, blob);
-  }).then(pictureEntry => {
+  }).then((pictureEntry) => {
     return this.wrapPicture_(pictureEntry);
   });
+
   return Promise.all([this.loaded_, saved]).then(([pictures, picture]) => {
     // Insert the picture into the sorted pictures' model.
     for (var index = pictures.length - 1; index >= 0; index--) {

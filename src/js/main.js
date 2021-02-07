@@ -16,36 +16,53 @@ var cca = cca || {};
  */
 cca.App = function(aspectRatio) {
   /**
-   * @type {cca.App.ViewsStack}
+   * @type {cca.models.Gallery}
    * @private
    */
-  this.viewsStack_ = new cca.App.ViewsStack();
-
-  /**
-   * @type {cca.Router}
-   * @private
-   */
-  this.router_ = new cca.Router(
-      this.navigateById_.bind(this),
-      this.viewsStack_.pop.bind(this.viewsStack_));
+  this.model_ = new cca.models.Gallery();
 
   /**
    * @type {cca.views.Camera}
    * @private
    */
-  this.cameraView_ = null;
+  this.cameraView_ = new cca.views.Camera(
+      this.model_, this.onWindowResize_.bind(this));
+
+  /**
+   * @type {cca.views.MasterSettings}
+   * @private
+   */
+  this.settingsView_ = new cca.views.MasterSettings();
+
+  /**
+   * @type {cca.views.GridSettings}
+   * @private
+   */
+  this.gridsettingsView_ = new cca.views.GridSettings();
+
+  /**
+   * @type {cca.views.TimerSettings}
+   * @private
+   */
+  this.timersettingsView_ = new cca.views.TimerSettings();
 
   /**
    * @type {cca.views.Browser}
    * @private
    */
-  this.browserView_ = null;
+  this.browserView_ = new cca.views.Browser(this.model_);
+
+  /**
+   * @type {cca.views.Warning}
+   * @private
+   */
+  this.warningView_ = new cca.views.Warning();
 
   /**
    * @type {cca.views.Dialog}
    * @private
    */
-  this.dialogView_ = null;
+  this.dialogView_ = new cca.views.Dialog();
 
   /**
    * @type {?number}
@@ -62,150 +79,126 @@ cca.App = function(aspectRatio) {
   // End of properties. Seal the object.
   Object.seal(this);
 
-  // Handle key presses to make the Camera app accessible via the keyboard.
   document.body.addEventListener('keydown', this.onKeyPressed_.bind(this));
-
-  // Handle window resize.
   window.addEventListener('resize', this.onWindowResize_.bind(this, null));
 
-  // Set the localized window title.
   document.title = chrome.i18n.getMessage('name');
+  this.setupI18nElements_();
+  this.setupToggles_();
+};
+
+/*
+ * Checks if it is applicable to use CrOS gallery app.
+ * @return {boolean} Whether applicable or not.
+ */
+cca.App.useGalleryApp = function() {
+  return chrome.fileManagerPrivate &&
+      document.body.classList.contains('ext-fs');
 };
 
 /**
- * Creates a stack of views.
- * @constructor
+ * Sets up i18n messages on elements by i18n attributes.
+ * @private
  */
-cca.App.ViewsStack = function() {
-  /**
-   * Stack with the views as well as return callbacks.
-   * @type {Array.<Object>}
-   * @private
-   */
-  this.stack_ = [];
+cca.App.prototype.setupI18nElements_ = function() {
+  var getElements = (attr) => document.querySelectorAll('[' + attr + ']');
+  var getMessage = (element, attr) => chrome.i18n.getMessage(
+      element.getAttribute(attr));
+  var setAriaLabel = (element, attr) => element.setAttribute(
+      'aria-label', getMessage(element, attr));
 
-  // No more properties. Seal the object.
-  Object.seal(this);
-};
-
-cca.App.ViewsStack.prototype = {
-  get current() {
-    return this.stack_.length ? this.stack_[this.stack_.length - 1].view : null;
-  },
-  get all() {
-    return this.stack_.map(entry => entry.view);
-  },
+  getElements('i18n-content').forEach(
+      (element) => element.textContent = getMessage(element, 'i18n-content'));
+  getElements('i18n-aria').forEach(
+      (element) => setAriaLabel(element, 'i18n-aria'));
+  cca.tooltip.setup(getElements('i18n-label')).forEach(
+      (element) => setAriaLabel(element, 'i18n-label'));
 };
 
 /**
- * Adds the view on the stack and hence makes it the current one. Optionally,
- * passes the arguments to the view.
- * @param {cca.View} view View to be pushed on top of the stack.
- * @param {Object=} opt_arguments Optional arguments.
- * @param {function(Object=)} opt_callback Optional result callback to be called
- *     when the view is closed.
+ * Sets up toggles (checkbox and radio) by data attributes.
+ * @private
  */
-cca.App.ViewsStack.prototype.push = function(
-    view, opt_arguments, opt_callback) {
-  if (!view)
-    return;
-  if (this.current)
-    this.current.inactivate();
+cca.App.prototype.setupToggles_ = function() {
+  document.querySelectorAll('input').forEach((element) => {
+    element.addEventListener('keypress', (event) =>
+        cca.util.getShortcutIdentifier(event) == 'Enter' && element.click());
 
-  this.stack_.push({
-    view: view,
-    callback: opt_callback || function(result) {},
+    var css = element.getAttribute('data-css');
+    var key = element.getAttribute('data-key');
+    var payload = () => {
+      var keys = {};
+      keys[key] = element.checked;
+      return keys;
+    };
+    element.addEventListener('change', (event) => {
+      if (css) {
+        document.body.classList.toggle(css, element.checked);
+      }
+      if (event.isTrusted) {
+        element.save();
+        if (element.type == 'radio' && element.checked) {
+          // Handle unchecked grouped sibling radios.
+          var grouped = `input[type=radio][name=${element.name}]:not(:checked)`;
+          document.querySelectorAll(grouped).forEach((radio) =>
+              radio.dispatchEvent(new Event('change')) && radio.save());
+        }
+      }
+    });
+    element.toggleChecked = (checked) => {
+      element.checked = checked;
+      element.dispatchEvent(new Event('change')); // Trigger toggling css.
+    };
+    element.save = () => {
+      return key && chrome.storage.local.set(payload());
+    };
+    if (key) {
+      // Restore the previously saved state on startup.
+      chrome.storage.local.get(payload(),
+          (values) => element.toggleChecked(values[key]));
+    }
   });
-
-  view.enter(opt_arguments);
-  view.activate();
 };
 
 /**
- * Removes the current view from the stack and hence makes the previous one
- * the current one. Calls the callback passed to the previous view's navigate()
- * method with the result.
- * @param {Object=} opt_result Optional result. If not passed, then undefined
- *     will be passed to the callback.
- */
-cca.App.ViewsStack.prototype.pop = function(opt_result) {
-  var entry = this.stack_.pop();
-  entry.view.inactivate();
-  entry.view.leave();
-
-  if (this.current)
-    this.current.activate();
-  if (entry.callback)
-    entry.callback(opt_result);
-};
-
-/**
- * Starts the app by initializing views and showing the camera view.
+ * Starts the app by preparing views/model and opening the camera-view.
  */
 cca.App.prototype.start = function() {
-  var model = new cca.models.Gallery();
-  this.cameraView_ = new cca.views.Camera(
-      this.router_, model, this.onWindowResize_.bind(this));
-  this.browserView_ = new cca.views.Browser(this.router_, model);
-  this.dialogView_ = new cca.views.Dialog(this.router_);
-
-  var promptMigrate = () => {
-    return new Promise((resolve, reject) => {
-      this.router_.navigate(cca.Router.ViewIdentifier.DIALOG, {
-        type: cca.views.Dialog.Type.ALERT,
-        message: chrome.i18n.getMessage('migratePicturesMsg'),
-      }, result => {
-        if (!result.isPositive) {
-          var error = new Error('Did not acknowledge migrate-prompt.');
-          error.exitApp = true;
-          reject(error);
-          return;
-        }
-        resolve();
-      });
+  cca.nav.setup([
+    this.cameraView_,
+    this.settingsView_,
+    this.gridsettingsView_,
+    this.timersettingsView_,
+    this.browserView_,
+    this.warningView_,
+    this.dialogView_,
+  ]);
+  cca.models.FileSystem.initialize(() => {
+    // Prompt to migrate pictures if needed.
+    var message = chrome.i18n.getMessage('migratePicturesMsg');
+    return cca.nav.open('dialog', message, false).then((acked) => {
+      if (!acked) {
+        throw new Error('no-migrate');
+      }
     });
-  };
-  cca.models.FileSystem.initialize(promptMigrate).then(() => {
-    // Prepare the views and model, and then make the app ready.
+  }).then((external) => {
+    document.body.classList.toggle('ext-fs', external);
+    // Prepare the views/model and open camera-view.
     this.cameraView_.prepare();
-    this.browserView_.prepare();
-    model.load([this.cameraView_.galleryButton, this.browserView_]);
-
-    cca.tooltip.setup();
-    cca.util.makeElementsUnfocusableByMouse();
-    cca.util.setupElementsAria();
-    this.router_.navigate(cca.Router.ViewIdentifier.CAMERA);
+    this.model_.addObserver(this.cameraView_.galleryButton);
+    if (!cca.App.useGalleryApp()) {
+      this.model_.addObserver(this.browserView_);
+    }
+    this.model_.load();
+    cca.nav.open('camera');
   }).catch((error) => {
     console.error(error);
-    if (error && error.exitApp) {
+    if (error && error.message == 'no-migrate') {
       chrome.app.window.current().close();
       return;
     }
-    cca.App.onError('filesystem-failure', 'errorMsgFileSystemFailed');
+    cca.nav.open('warning', 'filesystem-failure');
   });
-};
-
-/**
- * Switches the view using a router's view identifier.
- * @param {cca.Router.ViewIdentifier} viewIdentifier View identifier.
- * @param {Object=} opt_arguments Optional arguments for the view.
- * @param {function(Object=)} opt_callback Optional result callback to be called
- *     when the view is closed.
- * @private
- */
-cca.App.prototype.navigateById_ = function(
-    viewIdentifier, opt_arguments, opt_callback) {
-  switch (viewIdentifier) {
-    case cca.Router.ViewIdentifier.CAMERA:
-      this.viewsStack_.push(this.cameraView_, opt_arguments, opt_callback);
-      break;
-    case cca.Router.ViewIdentifier.BROWSER:
-      this.viewsStack_.push(this.browserView_, opt_arguments, opt_callback);
-      break;
-    case cca.Router.ViewIdentifier.DIALOG:
-      this.viewsStack_.push(this.dialogView_, opt_arguments, opt_callback);
-      break;
-  }
 };
 
 /**
@@ -220,14 +213,12 @@ cca.App.prototype.resizeByAspectRatio_ = function() {
 
   // Keep the width fixed and calculate the height by the aspect ratio.
   // TODO(yuli): Update min-width for resizing at portrait orientation.
-  var appWindow = chrome.app.window.current();
-  var inner = appWindow.innerBounds;
+  var inner = chrome.app.window.current().innerBounds;
   var innerW = inner.minWidth;
   var innerH = Math.round(innerW / this.aspectRatio_);
 
   // Limit window resizing capability by setting min-height. Don't limit
   // max-height here as it may disable maximize/fullscreen capabilities.
-  // TODO(yuli): Revise if there is an alternative fix.
   inner.minHeight = innerH;
 
   inner.width = innerW;
@@ -255,13 +246,7 @@ cca.App.prototype.onWindowResize_ = function(aspectRatio) {
       this.resizeByAspectRatio_();
     }, 500);
   }
-
-  // Resize all stacked views rather than just the current-view to avoid
-  // camera-preview not being resized if a dialog or settings' menu is shown on
-  // top of the camera-view.
-  this.viewsStack_.all.forEach(view => {
-    view.onResize();
-  });
+  cca.nav.onWindowResized();
 };
 
 /**
@@ -270,44 +255,12 @@ cca.App.prototype.onWindowResize_ = function(aspectRatio) {
  * @private
  */
 cca.App.prototype.onKeyPressed_ = function(event) {
-  if (cca.util.getShortcutIdentifier(event) == 'BrowserBack') {
-    chrome.app.window.current().minimize();
-    return;
-  }
-
-  var currentView = this.viewsStack_.current;
-  if (currentView && !document.body.classList.contains('has-error')) {
-    currentView.onKeyPressed(event);
-  }
+  cca.tooltip.hide(); // Hide shown tooltip on any keypress.
+  cca.nav.onKeyPressed(event);
 };
 
 /**
- * Shows an error message.
- * @param {string} identifier Identifier of the error.
- * @param {string} message Message for the error.
- */
-cca.App.onError = function(identifier, message) {
-  // TODO(yuli): Implement error-identifier to look up messages/hints and handle
-  // multiple errors. Make 'error' a view to block buttons on other views.
-  document.body.classList.add('has-error');
-  // Use setTimeout to wait for error-view to be visible by screen reader.
-  setTimeout(() => {
-    document.querySelector('#error-msg').textContent =
-        chrome.i18n.getMessage(message) || message;
-  }, 0);
-};
-
-/**
- * Removes the error message when an error goes away.
- * @param {string} identifier Identifier of the error.
- */
-cca.App.onErrorRecovered = function(identifier) {
-  document.body.classList.remove('has-error');
-  document.querySelector('#error-msg').textContent = '';
-};
-
-/**
- * @type {cca.App} Singleton of the Camera object.
+ * @type {cca.App} Singleton of the App object.
  * @private
  */
 cca.App.instance_ = null;

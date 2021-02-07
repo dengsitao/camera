@@ -16,16 +16,14 @@ cca.views = cca.views || {};
 
 /**
  * Creates the Gallery Base view controller.
- * @param {cca.Router} router View router to switch views.
+ * @param {string} selector Selector text of the view's root element.
  * @param {cca.models.Gallery} model Model object.
- * @param {HTMLElement} rootElement Root element of the view.
- * @param {string} name View name.
- * @extends {cca.View}
+ * @extends {cca.views.View}
  * @implements {cca.models.Gallery.Observer}
  * @constructor
  */
-cca.views.GalleryBase = function(router, model, rootElement, name) {
-  cca.View.call(this, router, rootElement, name);
+cca.views.GalleryBase = function(selector, model) {
+  cca.views.View.call(this, selector, true);
 
   /**
    * @type {cca.models.Gallery}
@@ -35,23 +33,17 @@ cca.views.GalleryBase = function(router, model, rootElement, name) {
 
   /**
    * Contains pictures' views.
-   * @type {Array.<cca.views.GalleryBase.DOMPicture>}
+   * @type {Array<cca.views.GalleryBase.DOMPicture>}
    * @protected
    */
   this.pictures = [];
 
   /**
    * Contains selected pictures' indexes sorted in the selection order.
-   * @type {Array.<number>}
+   * @type {Array<number>}
    * @protected
    */
   this.selectedIndexes = [];
-
-  /**
-   * @type {boolean}
-   * @private
-   */
-  this.forceUpcomingFocusSync_ = false;
 };
 
 /**
@@ -88,7 +80,7 @@ cca.views.GalleryBase.DOMPicture.prototype = {
 };
 
 cca.views.GalleryBase.prototype = {
-  __proto__: cca.View.prototype,
+  __proto__: cca.views.View.prototype,
 };
 
 /**
@@ -97,25 +89,25 @@ cca.views.GalleryBase.prototype = {
  */
 cca.views.GalleryBase.prototype.exportSelection = function() {
   var selectedIndexes = this.selectedIndexes;
-  if (!selectedIndexes.length)
+  if (!selectedIndexes.length) {
     return;
-
-  chrome.fileSystem.chooseEntry({type: 'openDirectory'}, dirEntry => {
-    if (!dirEntry)
+  }
+  chrome.fileSystem.chooseEntry({type: 'openDirectory'}, (dirEntry) => {
+    if (!dirEntry) {
       return;
-
-    this.selectedPictures().forEach(domPicture => {
+    }
+    this.selectedPictures().forEach((domPicture) => {
       var picture = domPicture.picture;
       // TODO(yuli): Use FileSystem.getFile_ to handle name conflicts.
       dirEntry.getFile(
           cca.models.FileSystem.regulatePictureName(picture.pictureEntry),
-          {create: true, exclusive: false}, entry => {
-        this.model_.exportPicture(picture, entry).catch(error => {
-          console.error(error);
-          cca.toast.show(chrome.i18n.getMessage(
-              'errorMsgGalleryExportFailed', entry.name));
-        });
-      });
+          {create: true, exclusive: false}, (entry) => {
+            this.model_.exportPicture(picture, entry).catch((error) => {
+              console.error(error);
+              cca.toast.show(chrome.i18n.getMessage(
+                  'errorMsgGalleryExportFailed', entry.name));
+            });
+          });
     });
   });
 };
@@ -127,24 +119,23 @@ cca.views.GalleryBase.prototype.exportSelection = function() {
  */
 cca.views.GalleryBase.prototype.deleteSelection = function() {
   var selectedIndexes = this.selectedIndexes;
-  if (!selectedIndexes.length)
+  if (!selectedIndexes.length) {
     return;
-
+  }
   var multi = selectedIndexes.length > 1;
   var param = multi ? selectedIndexes.length.toString() :
       this.lastSelectedPicture().picture.pictureEntry.name;
-  this.router.navigate(cca.Router.ViewIdentifier.DIALOG, {
-    type: cca.views.Dialog.Type.CONFIRMATION,
-    message: chrome.i18n.getMessage(multi ?
-        'deleteMultiConfirmationMsg' : 'deleteConfirmationMsg', param),
-  }, result => {
-    if (!result.isPositive)
+  var message = chrome.i18n.getMessage(
+      multi ? 'deleteMultiConfirmationMsg' : 'deleteConfirmationMsg', param);
+  cca.nav.open('dialog', message, true).then((confirmed) => {
+    if (!confirmed) {
       return;
+    }
     var selectedPictures = this.selectedPictures();
     for (var i = selectedPictures.length - 1; i >= 0; i--) {
-      this.model_.deletePicture(selectedPictures[i].picture).catch(error => {
+      this.model_.deletePicture(selectedPictures[i].picture).catch((error) => {
         console.error(error);
-        // TODO(yuli): Move Toast out of views/ and show a toast message here.
+        // TODO(yuli): Show a toast message here.
       });
     }
   });
@@ -157,9 +148,9 @@ cca.views.GalleryBase.prototype.deleteSelection = function() {
  */
 cca.views.GalleryBase.prototype.lastSelectedIndex = function() {
   var selectedIndexes = this.selectedIndexes;
-  if (!selectedIndexes.length)
+  if (!selectedIndexes.length) {
     return null;
-
+  }
   return selectedIndexes[selectedIndexes.length - 1];
 };
 
@@ -175,7 +166,7 @@ cca.views.GalleryBase.prototype.lastSelectedPicture = function() {
 
 /**
  * Returns the currently selected picture views sorted in the added order.
- * @return {Array.<cca.views.GalleryBase.DOMPicture>}
+ * @return {Array<cca.views.GalleryBase.DOMPicture>}
  * @protected
  */
 cca.views.GalleryBase.prototype.selectedPictures = function() {
@@ -192,49 +183,11 @@ cca.views.GalleryBase.prototype.selectedPictures = function() {
  */
 cca.views.GalleryBase.prototype.pictureIndex = function(picture) {
   for (var index = 0; index < this.pictures.length; index++) {
-    if (this.pictures[index].picture == picture)
+    if (this.pictures[index].picture == picture) {
       return index;
+    }
   }
   return null;
-};
-
-/**
- * @override
- */
-cca.views.GalleryBase.prototype.onActivate = function() {
-  // Tab indexes have to be recalculated, since they might have changed while
-  // the view wasn't active. Therefore, the restoring logic in the View class
-  // might have restored old tabIndex values.
-  var selectedPicture = this.lastSelectedPicture();
-  for (var index = 0; index < this.pictures.length; index++) {
-    var picture = this.pictures[index];
-    picture.element.tabIndex = (picture == selectedPicture) ? 0 : -1;
-  }
-};
-
-/**
- * Sets the picture as selected.
- * @param {number} index Index of the picture to be selected.
- * @protected
- */
-cca.views.GalleryBase.prototype.setPictureSelected = function(index) {
-  this.pictures[index].element.tabIndex = this.active ? 0 : -1;
-  this.pictures[index].element.classList.add('selected');
-  this.pictures[index].element.setAttribute('aria-selected', 'true');
-
-  this.ariaListNode().setAttribute('aria-activedescendant',
-      this.pictures[index].element.id);
-};
-
-/**
- * Sets the picture as unselected.
- * @param {number} index Index of the picture to be unselected.
- * @protected
- */
-cca.views.GalleryBase.prototype.setPictureUnselected = function(index) {
-  this.pictures[index].element.tabIndex = -1;
-  this.pictures[index].element.classList.remove('selected');
-  this.pictures[index].element.setAttribute('aria-selected', 'false');
 };
 
 /**
@@ -243,14 +196,20 @@ cca.views.GalleryBase.prototype.setPictureUnselected = function(index) {
  * @protected
  */
 cca.views.GalleryBase.prototype.setSelectedIndex = function(index) {
+  var updateSelection = (element, select) => {
+    cca.nav.setTabIndex(this, element, select ? 0 : -1);
+    element.classList.toggle('selected', select);
+    element.setAttribute('aria-selected', select ? 'true' : 'false');
+  };
+  // Unselect selected pictures and select a new picture by the given index.
   var selectedIndexes = this.selectedIndexes;
-  for (var i = 0; i < selectedIndexes.length; i++) {
-    this.setPictureUnselected(selectedIndexes[i]);
-  }
+  selectedIndexes.forEach((selectedIndex) => {
+    updateSelection(this.pictures[selectedIndex].element, false);
+  });
   selectedIndexes.splice(0, selectedIndexes.length);
 
   if (index !== null) {
-    this.setPictureSelected(index);
+    updateSelection(this.pictures[index].element, true);
     selectedIndexes.push(index);
   }
 };
@@ -260,15 +219,15 @@ cca.views.GalleryBase.prototype.setSelectedIndex = function(index) {
  */
 cca.views.GalleryBase.prototype.onPictureDeleted = function(picture) {
   var index = this.pictureIndex(picture);
-  if (index == null)
+  if (index == null) {
     return;
+  }
 
   // Hack to restore focus after removing an element. Note, that we restore
   // focus only if there was something focused before. However, if the focus
   // was on the selected element, then after removing it from DOM, there will
   // be nothing focused, while we still want to restore the focus.
   var element = this.pictures[index].element;
-  this.forceUpcomingFocusSync_ = document.activeElement == element;
   element.parentNode.removeChild(element);
   this.pictures.splice(index, 1);
 
@@ -277,8 +236,9 @@ cca.views.GalleryBase.prototype.onPictureDeleted = function(picture) {
   if (removal != -1) {
     this.selectedIndexes.splice(removal, 1);
     for (var i = 0; i < this.selectedIndexes.length; i++) {
-      if (this.selectedIndexes[i] > index)
+      if (this.selectedIndexes[i] > index) {
         this.selectedIndexes[i]--;
+      }
     }
   }
   if (!this.selectedIndexes.length) {
@@ -286,9 +246,9 @@ cca.views.GalleryBase.prototype.onPictureDeleted = function(picture) {
       this.setSelectedIndex(Math.max(0, index - 1));
     } else {
       this.setSelectedIndex(null);
-      if (this.entered) {
-        this.router.back();
-      }
+      // Assume browser-view's picture-deletion only occurs when browser-view is
+      // active and don't need to handle inactive empty browser-view for now.
+      this.leave();
     }
   }
 };
@@ -296,26 +256,20 @@ cca.views.GalleryBase.prototype.onPictureDeleted = function(picture) {
 /**
  * @override
  */
-cca.views.GalleryBase.prototype.onKeyPressed = function(event) {
-  switch (cca.util.getShortcutIdentifier(event)) {
+cca.views.GalleryBase.prototype.handlingKey = function(key) {
+  switch (key) {
     case 'Delete':
     case 'Meta-Backspace':
       this.deleteSelection();
-      event.preventDefault();
-      break;
-    case 'Escape':
-      this.router.back();
-      event.preventDefault();
-      break;
+      return true;
     case 'Ctrl-S': // Ctrl+S for saving.
       this.exportSelection();
-      event.preventDefault();
-      break;
+      return true;
     case 'Ctrl-P': // Ctrl+P for printing.
       window.print();
-      event.preventDefault();
-      break;
+      return true;
   }
+  return false;
 };
 
 /**
@@ -326,7 +280,8 @@ cca.views.GalleryBase.prototype.onPictureAdded = function(picture) {
 };
 
 /**
- * Adds the picture to DOM. Should be overriden by inheriting classes.
+ * Adds the picture to DOM.
+ * @abstract
  * @param {cca.models.Gallery.Picture} picture Model's picture to be added.
  * @protected
  */
@@ -335,30 +290,14 @@ cca.views.GalleryBase.prototype.addPictureToDOM = function(picture) {
 };
 
 /**
- * Provides node for the picture list to be used to set list aria attributes.
- * @return {HTMLElement}
- * @protected
- */
-cca.views.GalleryBase.prototype.ariaListNode = function() {
-  throw new Error('Not implemented.');
-};
-
-/**
- * Synchronizes focus with the selection, if it was previously set on anything
- * else.
+ * Synchronizes focus with the selection if the view is active.
  * @protected
  */
 cca.views.GalleryBase.prototype.synchronizeFocus = function() {
-  // Force focusing only once, after deleting a picture. This is because, the
-  // focus might be lost since the deleted picture is removed from DOM.
-  var force = this.forceUpcomingFocusSync_;
-  this.forceUpcomingFocusSync_ = false;
-
   // Synchronize focus on the last selected picture.
   var selectedPicture = this.lastSelectedPicture();
-  if (selectedPicture && (document.activeElement != document.body || force) &&
-      selectedPicture.element.getAttribute('tabindex') !== undefined &&
-      selectedPicture.element.getAttribute('tabindex') != -1) {
-    selectedPicture.element.focus();
+  var element = selectedPicture && selectedPicture.element;
+  if (element && element.tabIndex >= 0) {
+    element.focus();
   }
 };

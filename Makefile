@@ -83,11 +83,13 @@ RESOURCES = \
 	src/images/camera_button_mic_on.svg \
 	src/images/camera_button_mirror_off.svg \
 	src/images/camera_button_mirror_on.svg \
+	src/images/camera_button_settings.svg \
 	src/images/camera_button_switch_device.svg \
 	src/images/camera_button_switch_photo.svg \
 	src/images/camera_button_switch_video.svg \
 	src/images/camera_button_timer_off.svg \
-	src/images/camera_button_timer_on.svg \
+	src/images/camera_button_timer_on_10s.svg \
+	src/images/camera_button_timer_on_3s.svg \
 	src/images/camera_focus_aim.svg \
 	src/images/camera_mode_photo.svg \
 	src/images/camera_mode_recording.svg \
@@ -100,17 +102,22 @@ RESOURCES = \
 	src/images/camera_shutter_recording_start_hover.svg \
 	src/images/camera_shutter_recording_stop.svg \
 	src/images/camera_shutter_recording_stop_hover.svg \
+	src/images/settings_button_back.svg \
+	src/images/settings_button_expand.svg \
+	src/images/settings_feedback.svg \
+	src/images/settings_grid_type.svg \
+	src/images/settings_help.svg \
+	src/images/settings_timer_duration.svg \
 	src/images/spinner.svg \
 	src/js/background.js \
 	src/js/main.js \
 	src/js/models/gallery.js \
 	src/js/models/file_system.js \
-	src/js/router.js \
+	src/js/nav.js \
 	src/js/scrollbar.js \
 	src/js/toast.js \
 	src/js/tooltip.js \
 	src/js/util.js \
-	src/js/view.js \
 	src/js/views/browser.js \
 	src/js/views/camera.js \
 	src/js/views/camera/gallerybutton.js \
@@ -120,6 +127,9 @@ RESOURCES = \
 	src/js/views/camera/recordtime.js \
 	src/js/views/dialog.js \
 	src/js/views/gallery_base.js \
+	src/js/views/settings.js \
+	src/js/views/view.js \
+	src/js/views/warning.js \
 	src/sounds/record_end.ogg \
 	src/sounds/record_start.ogg \
 	src/sounds/shutter.ogg \
