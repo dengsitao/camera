@@ -128,7 +128,7 @@
     "description": "Label for timer-duration: 10 seconds."
   },
   "takePhotoButton": {
-    "message": "צילום התמונה",
+    "message": "צילום תמונה",
     "description": "Label for the shutter button to take photo."
   },
   "takePhotoCancelButton": {

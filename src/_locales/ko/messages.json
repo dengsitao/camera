@@ -42,7 +42,7 @@
     "description": "Error message shown when no data is recorded for a recording and it won't be added to the gallery."
   },
   "statusMsgRecordingStopped": {
-    "message": "녹화가 중지되었습니다.",
+    "message": "녹음 또는 녹화가 중지되었습니다.",
     "description": "Status message for spoken feedback when video recording has been stopped."
   },
   "statusMsgCameraSwitched": {
@@ -200,7 +200,7 @@
     }
   },
   "migratePicturesMsg": {
-    "message": "카메라로 촬영된 사진 및 동영상은 다운로드 폴더로 이동되며, 파일 앱에서 액세스할 수 있습니다.\n\n저장용량 사용 권한이 있는 앱은 사진 및 동영상에 액세스할 수 있습니다.",
+    "message": "카메라로 촬영된 사진 및 동영상은 다운로드 폴더로 이동됩니다. 파일 앱에서 이러한 사진 및 동영상에 액세스할 수 있습니다.\n\n저장용량 사용 권한이 있는 앱은 사진 및 동영상에 액세스할 수 있습니다.",
     "description": "Message shown before moving all photos and videos stored in the Camera App to the Downloads folder."
   }
 }

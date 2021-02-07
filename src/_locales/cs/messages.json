@@ -12,7 +12,7 @@
     "description": "Error message shown when failing to read or write the file system."
   },
   "errorMsgNoCamera": {
-    "message": "Fotoaparát momentálně není dostupný.\nZkontrolujte, zda je fotoaparát správně připojen.",
+    "message": "Fotoaparát momentálně není dostupný.\nZkontrolujte, zda je fotoaparát správně zapojen.",
     "description": "Error message shown when it was impossible to connect to the camera due to unavailability."
   },
   "errorMsgGalleryExportFailed": {

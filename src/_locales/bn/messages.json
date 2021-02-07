@@ -76,7 +76,7 @@
     "description": "Label for the back button."
   },
   "galleryImages": {
-    "message": "গ্যালারির ছবিগুলি",
+    "message": "গ্যালারির ছবি",
     "description": "Text to speech label for the gallery list."
   },
   "settingsButton": {

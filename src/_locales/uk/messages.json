@@ -144,7 +144,7 @@
     "description": "Label for the shutter button to stop recording."
   },
   "switchCameraButton": {
-    "message": "Перемкнутися на наступну камеру",
+    "message": "Перейти на наступну камеру",
     "description": "Label for the button to switch to next connected camera. Eg. switching from front facing to back facing, or a camera connected via USB. The button is shown only when more than one camera is connected."
   },
   "switchRecordVideoButton": {
@@ -164,7 +164,7 @@
     "description": "Label for the checkbox to toggle the preview mirroring. Eg. if mirroring is toggled on, preview will be flipped horizontally."
   },
   "toggleGridButton": {
-    "message": "Сітка",
+    "message": "Таблиця",
     "description": "Label for the checkbox to toggle the grid shown on preview."
   },
   "toggleMicButton": {

@@ -16,7 +16,7 @@
     "description": "Error message shown when it was impossible to connect to the camera due to unavailability."
   },
   "errorMsgGalleryExportFailed": {
-    "message": "Imeshindwa kutuma $file$",
+    "message": "Imeshindwa kutuma $file$.",
     "description": "Error message shown when exporting to an external directory failed. Expects a file name to be passed in.",
     "placeholders": {
       "file": {

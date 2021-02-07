@@ -164,7 +164,7 @@
     "description": "Label for the checkbox to toggle the preview mirroring. Eg. if mirroring is toggled on, preview will be flipped horizontally."
   },
   "toggleGridButton": {
-    "message": "Kılavuz",
+    "message": "Izgara",
     "description": "Label for the checkbox to toggle the grid shown on preview."
   },
   "toggleMicButton": {

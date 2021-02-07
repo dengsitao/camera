@@ -42,7 +42,7 @@
     "description": "Error message shown when no data is recorded for a recording and it won't be added to the gallery."
   },
   "statusMsgRecordingStopped": {
-    "message": "録画を停止しました",
+    "message": "記録を停止しました",
     "description": "Status message for spoken feedback when video recording has been stopped."
   },
   "statusMsgCameraSwitched": {

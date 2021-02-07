@@ -144,7 +144,7 @@
     "description": "Label for the shutter button to stop recording."
   },
   "switchCameraButton": {
-    "message": "अगले कैमरे का इस्तेमाल करें",
+    "message": "अगले कैमरा का इस्तेमाल करें",
     "description": "Label for the button to switch to next connected camera. Eg. switching from front facing to back facing, or a camera connected via USB. The button is shown only when more than one camera is connected."
   },
   "switchRecordVideoButton": {

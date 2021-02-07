@@ -42,7 +42,7 @@
     "description": "Error message shown when no data is recorded for a recording and it won't be added to the gallery."
   },
   "statusMsgRecordingStopped": {
-    "message": "A rögzítés leállt",
+    "message": "A felvétel leállt",
     "description": "Status message for spoken feedback when video recording has been stopped."
   },
   "statusMsgCameraSwitched": {

@@ -12,7 +12,7 @@
     "description": "Error message shown when failing to read or write the file system."
   },
   "errorMsgNoCamera": {
-    "message": "तुमचा कॅमेरा सध्या उपलब्ध नाही.\nकृपया कॅमेरा योग्यरीत्‍या कनेक्ट केला असल्याचे तपासा.",
+    "message": "तुमचा कॅमेरा सध्या उपलब्ध नाही.\nकॅमेरा योग्यरित्‍या कनेक्ट केला असल्याचे तपासा.",
     "description": "Error message shown when it was impossible to connect to the camera due to unavailability."
   },
   "errorMsgGalleryExportFailed": {
@@ -42,11 +42,11 @@
     "description": "Error message shown when no data is recorded for a recording and it won't be added to the gallery."
   },
   "statusMsgRecordingStopped": {
-    "message": "रेकॉर्डिंग थांबले आहे",
+    "message": "रेकॉर्डिंग थांबले",
     "description": "Status message for spoken feedback when video recording has been stopped."
   },
   "statusMsgCameraSwitched": {
-    "message": "$camera$ अ‍ॅक्टिव्ह आहे",
+    "message": "$camera$ अ‍ॅक्टिव्ह करा",
     "description": "Status message for spoken feedback when switching over to another camera.",
     "placeholders": {
       "camera": {
